@@ -353,6 +353,9 @@ class Activity:
         user_id = self.calling_user.get("UserID", "")
         if user_id and user_id.startswith("manual"):
             return False
+        # Check if this was marked as a manual operation (from PubNub without timestamp)
+        if self._info.get("manual"):
+            return False
         # Empty info typically means status update (except for WebSocket activities)
         return not self._info and self.source != SOURCE_WEBSOCKET
 

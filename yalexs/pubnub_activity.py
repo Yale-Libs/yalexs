@@ -93,6 +93,9 @@ def activities_from_pubnub_message(  # noqa: C901
         # activity
         if accept_user and calling_user_id:
             activity_dict["callingUser"] = {"UserID": calling_user_id}
+        # Mark manual operations so they're not treated as status updates
+        elif calling_user_id and calling_user_id.startswith("manual"):
+            activity_dict["info"]["manual"] = True
         if "remoteEvent" in message:
             activity_dict["info"]["remote"] = True
         error = message.get("error") or {}

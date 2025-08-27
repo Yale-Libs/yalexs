@@ -7,6 +7,8 @@ import dateutil.parser
 from dateutil.tz import tzlocal
 
 from yalexs.activity import (
+    SOURCE_PUBNUB,
+    SOURCE_WEBSOCKET,
     ActivityType,
     BridgeOperationActivity,
     DoorbellDingActivity,
@@ -546,3 +548,116 @@ class TestBridge(unittest.TestCase):
         assert isinstance(activities[0], BridgeOperationActivity)
         assert "BridgeOperationActivity" in str(activities[0])
         assert activities[0].action == "associated_bridge_offline"
+
+    def test_websocket_source_handling(self):
+        lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+            {"status": "kAugLockState_Locked"},
+            source=SOURCE_WEBSOCKET,
+        )
+        assert len(activities) == 1
+        assert activities[0].source == SOURCE_WEBSOCKET
+
+    def test_pubnub_source_default(self):
+        lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+            {"status": "kAugLockState_Locked"},
+        )
+        assert len(activities) == 1
+        assert activities[0].source == SOURCE_PUBNUB
+
+    def test_is_status_property(self):
+        """Test is_status property correctly identifies status updates."""
+        lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+
+        # Test normal lock operation is not a status
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+            {
+                "status": "kAugLockState_Locked",
+                "info": {"action": "lock", "startTime": "2017-12-10T05:48:30.272Z"},
+                "callingUserID": "user123",
+            },
+        )
+        assert len(activities) == 1
+        assert activities[0].is_status is False
+
+        # Test status update with no info and no user
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+            {"status": "kAugLockState_Locked"},
+        )
+        assert len(activities) == 1
+        assert activities[0].is_status is True
+
+        # Test manual operation is not a status
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+            {
+                "status": "kAugLockState_Locked",
+                "callingUserID": "manuallock",
+            },
+        )
+        assert len(activities) == 1
+        assert activities[0].is_status is False
+        # Manual operations without timestamps don't store the user ID but mark as manual
+        assert activities[0].operated_manual is True
+
+        # Test WebSocket messages with empty info are not status
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+            {"status": "kAugLockState_Locked"},
+            source=SOURCE_WEBSOCKET,
+        )
+        assert len(activities) == 1
+        assert activities[0].is_status is False
+
+    def test_pubnub_duplicate_state_detection(self):
+        """Test that duplicate PubNub messages with same state are detected."""
+        lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+
+        # First message - manual lock when already locked
+        activities1 = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+            {
+                "status": "locked",
+                "callingUserID": "manuallock",
+                "doorState": "closed",
+            },
+            source=SOURCE_PUBNUB,
+        )
+        assert len(activities1) == 2  # lock and door activities
+        assert activities1[0].action == "lock"
+        assert activities1[1].action == "doorclosed"
+
+        # Second identical message should still create activities
+        # (state tracking happens at the manager level, not here)
+        activities2 = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:31.272Z"),
+            {
+                "status": "locked",
+                "callingUserID": "manuallock",
+                "doorState": "closed",
+            },
+            source=SOURCE_PUBNUB,
+        )
+        assert len(activities2) == 2
+        assert activities2[0].action == "lock"
+        assert activities2[1].action == "doorclosed"
+        # Both should NOT be marked as status since they have manual flag
+        assert (
+            activities2[0].is_status is False
+        )  # manual lock operations are not status
+        assert (
+            activities2[1].is_status is False
+        )  # door activity with manual flag is not status
