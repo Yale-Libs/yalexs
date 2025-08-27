@@ -2,7 +2,7 @@ import datetime
 import random
 import ssl
 from functools import cache
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from .activity import (
     ACTION_BRIDGE_OFFLINE,
@@ -31,8 +31,8 @@ if TYPE_CHECKING:
 
 
 def get_latest_activity(
-    activity1: Optional[LockActivityTypes], activity2: Optional[LockActivityTypes]
-) -> Optional[LockActivityTypes]:
+    activity1: LockActivityTypes | None, activity2: LockActivityTypes | None
+) -> LockActivityTypes | None:
     """Return the latest activity."""
     return (
         activity2
