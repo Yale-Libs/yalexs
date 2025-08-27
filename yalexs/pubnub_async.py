@@ -3,9 +3,9 @@
 import asyncio
 import datetime
 import logging
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from functools import partial
-from typing import Any, Callable
+from typing import Any
 
 from pubnub.callbacks import SubscribeCallback
 from pubnub.enums import PNReconnectionPolicy, PNStatusCategory

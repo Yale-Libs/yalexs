@@ -14,10 +14,10 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 packages = [
     { include = "yalexs", from = "." },
@@ -28,7 +28,7 @@ packages = [
 "Changelog" = "https://github.com/bdraco/yalexs/blob/main/CHANGELOG.md"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 ciso8601 = ">=2.1.3"
 pyjwt = ">=2.8.0"
 requests = ">=2"

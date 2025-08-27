@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import timedelta
 from functools import partial
-from typing import Any, Callable
+from typing import Any
 
 from ..backports.tasks import create_eager_task
 

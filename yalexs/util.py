@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 import random
 import ssl
 from functools import cache
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from .activity import (
     ACTION_BRIDGE_OFFLINE,
@@ -31,8 +33,8 @@ if TYPE_CHECKING:
 
 
 def get_latest_activity(
-    activity1: Optional[LockActivityTypes], activity2: Optional[LockActivityTypes]
-) -> Optional[LockActivityTypes]:
+    activity1: LockActivityTypes | None, activity2: LockActivityTypes | None
+) -> LockActivityTypes | None:
     """Return the latest activity."""
     return (
         activity2
@@ -87,7 +89,7 @@ def update_lock_detail_from_activity(
 
 
 def update_doorbell_image_from_activity(
-    doorbell_detail: "DoorbellDetail", activity: DoorbellActivityTypes
+    doorbell_detail: DoorbellDetail, activity: DoorbellActivityTypes
 ) -> bool:
     """Update the DoorDetail from an activity with a new image."""
     if activity.device_id != doorbell_detail.device_id:
