@@ -204,17 +204,9 @@ class YaleXSData(SubscriberMixin):
         activities = activities_from_pubnub_message(device, date_time, message, source)
 
         # Check if this is a push message with unchanged state
-        if self._is_unchanged_push_state(device_id, message, source, activities):
-            _LOGGER.debug(
-                "Skipping unchanged %s state for %s: status=%s, lockAction=%s, doorState=%s",
-                source,
-                device_id,
-                message.get("status"),
-                message.get("lockAction"),
-                message.get("doorState"),
-            )
-            return
-
+        changed = not self._is_unchanged_push_state(
+            device_id, message, source, activities
+        )
         activity_stream = self.activity_stream
         _LOGGER.debug("async_push_message activities: %s for %s", activities, device_id)
         if activities and activity_stream.async_process_newer_device_activities(
@@ -224,6 +216,16 @@ class YaleXSData(SubscriberMixin):
                 "async_push_message newer activities: %s for %s", device_id, activities
             )
             self.async_signal_device_id_update(device.device_id)
+            if not changed:
+                _LOGGER.debug(
+                    "Skipping unchanged %s state for %s: status=%s, lockAction=%s, doorState=%s",
+                    source,
+                    device_id,
+                    message.get("status"),
+                    message.get("lockAction"),
+                    message.get("doorState"),
+                )
+                return
             for activity in activities:
                 # Don't trigger a house refresh if the activity is a status update
                 # to avoid unnecessary API calls.

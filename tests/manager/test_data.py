@@ -1,6 +1,8 @@
 """Test the manager data module."""
 
-from unittest.mock import Mock
+import logging
+from datetime import datetime
+from unittest.mock import Mock, patch
 
 from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
 from yalexs.manager.data import YaleXSData
@@ -271,3 +273,82 @@ class TestPushStateTracking:
             "lock": "unlocked",
             "door": "open",
         }
+
+    def test_unchanged_state_still_processes_newer_activities(self, caplog):
+        """Test that unchanged state messages still process if they have newer activities."""
+
+        # Create a more complete mock data object with required methods
+        class TestDataWithMethods:
+            def __init__(self):
+                self._last_push_state = {}
+                self._device_detail_by_id = {}
+                self.activity_stream = Mock()
+                self.activity_stream.async_process_newer_device_activities = Mock(
+                    return_value=True
+                )
+                self.activity_stream.async_schedule_house_id_refresh = Mock()
+
+            # Bind the actual methods from YaleXSData
+            _is_unchanged_push_state = YaleXSData._is_unchanged_push_state
+            _async_handle_push_message = YaleXSData._async_handle_push_message
+
+            def get_device_detail(self, device_id):
+                return self._device_detail_by_id.get(device_id)
+
+            def async_signal_device_id_update(self, device_id):
+                pass
+
+        data = TestDataWithMethods()
+        device_id = "test_device"
+
+        # Create a mock device
+        mock_device = Mock()
+        mock_device.device_id = device_id
+        mock_device.house_id = "test_house"
+        data._device_detail_by_id[device_id] = mock_device
+
+        # Set initial state
+        state_key = f"{device_id}:{SOURCE_PUBNUB}"
+        data._last_push_state[state_key] = {
+            "lock": "locked",
+            "door": "closed",
+        }
+
+        # Message with same state but newer timestamp (would have newer activities)
+        message = {
+            "status": "locked",
+            "doorState": "closed",
+            "callingUserID": "manuallock",
+        }
+
+        # Mock activity that is not a status update
+        mock_activity = Mock()
+        mock_activity.is_status = False
+        mock_activity.action = "lock"
+
+        with (
+            patch(
+                "yalexs.manager.data.activities_from_pubnub_message"
+            ) as mock_activities_func,
+            caplog.at_level(logging.DEBUG),
+        ):
+            mock_activities_func.return_value = [mock_activity]
+
+            # Call the push message handler
+            data._async_handle_push_message(
+                device_id, datetime.now(), message, SOURCE_PUBNUB
+            )
+
+            # Verify activities were processed even though state unchanged
+            assert data.activity_stream.async_process_newer_device_activities.called
+            assert data.activity_stream.async_process_newer_device_activities.call_args[
+                0
+            ][0] == [mock_activity]
+
+            # Verify we logged that state was unchanged
+            assert any(
+                "Skipping unchanged" in record.message for record in caplog.records
+            )
+
+            # Verify house refresh was NOT scheduled (because unchanged)
+            assert not data.activity_stream.async_schedule_house_id_refresh.called
