@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import random
 import ssl
@@ -87,7 +89,7 @@ def update_lock_detail_from_activity(
 
 
 def update_doorbell_image_from_activity(
-    doorbell_detail: "DoorbellDetail", activity: DoorbellActivityTypes
+    doorbell_detail: DoorbellDetail, activity: DoorbellActivityTypes
 ) -> bool:
     """Update the DoorDetail from an activity with a new image."""
     if activity.device_id != doorbell_detail.device_id:
