@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 ACTIVITY_STREAM_FETCH_LIMIT = 10
 ACTIVITY_CATCH_UP_FETCH_LIMIT = 2500
 
-INITIAL_LOCK_RESYNC_TIME = 60
+INITIAL_LOCK_RESYNC_TIME = 45
 
 # If there is a storm of activity (ie lock, unlock, door open, door close, etc)
 # we want to debounce the updates so we don't hammer the activity api too much.
@@ -223,15 +223,9 @@ class ActivityStream(SubscriberMixin):
         if not self._initial_resync_complete(now):
             # No resync yet, above spamming the API
             update_count = 1
-        elif self._updated_recently(house_id, now) or self._update_running(house_id):
-            # Update running or already updated recently
-            # no point in doing 3 updates as we will
-            # delay anyways
-            update_count = 2
         else:
-            # Not updated recently, be sure we do 3 updates
-            # so we do not miss any activity
-            update_count = 3
+            # Initial resync complete, we can do 2 updates
+            update_count = 2
         self._pending_updates[house_id] = update_count
 
     def async_schedule_house_id_refresh(self, house_id: str) -> None:

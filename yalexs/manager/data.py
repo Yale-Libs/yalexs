@@ -15,7 +15,7 @@ from typing import Any, ParamSpec, TypeVar
 from aiohttp import ClientError, ClientResponseError, ClientSession
 
 from .._compat import cached_property
-from ..activity import ActivityTypes, Source
+from ..activity import Activity, ActivityTypes, Source
 from ..backports.tasks import create_eager_task
 from ..const import Brand
 from ..doorbell import ContentTokenExpired, Doorbell, DoorbellDetail
@@ -83,7 +83,7 @@ class YaleXSData(SubscriberMixin):
         self._error_exception_class = error_exception_class
         self._shutdown: bool = False
         # Track last known state from WebSocket messages to avoid unnecessary updates
-        self._last_websocket_state: dict[str, dict[str, str]] = {}
+        self._last_push_state: dict[str, dict[str, str]] = {}
 
     @cached_property
     def brand(self) -> Brand:
@@ -200,21 +200,21 @@ class YaleXSData(SubscriberMixin):
     ) -> None:
         """Handle a push message."""
         _LOGGER.debug("async_push_message from %s: %s %s", source, device_id, message)
+        device = self.get_device_detail(device_id)
+        activities = activities_from_pubnub_message(device, date_time, message, source)
 
-        # Check if this is a WebSocket message with unchanged state
-        if source == Source.WEBSOCKET and self._is_unchanged_websocket_state(
-            device_id, message
-        ):
+        # Check if this is a push message with unchanged state
+        if self._is_unchanged_push_state(device_id, message, source, activities):
             _LOGGER.debug(
-                "Skipping unchanged WebSocket state for %s: lockAction=%s, doorState=%s",
+                "Skipping unchanged %s state for %s: status=%s, lockAction=%s, doorState=%s",
+                source,
                 device_id,
+                message.get("status"),
                 message.get("lockAction"),
                 message.get("doorState"),
             )
             return
 
-        device = self.get_device_detail(device_id)
-        activities = activities_from_pubnub_message(device, date_time, message, source)
         activity_stream = self.activity_stream
         _LOGGER.debug("async_push_message activities: %s for %s", activities, device_id)
         if activities and activity_stream.async_process_newer_device_activities(
@@ -513,29 +513,48 @@ class YaleXSData(SubscriberMixin):
             )
             del self._doorbells_by_id[device_id]
 
-    def _is_unchanged_websocket_state(
-        self, device_id: str, message: dict[str, Any]
+    def _is_unchanged_push_state(
+        self,
+        device_id: str,
+        message: dict[str, Any],
+        source: Source | str,
+        activities: list[Activity],
     ) -> bool:
-        """Check if a WebSocket message represents unchanged state."""
-        # Only check WebSocket messages that have lockAction/doorState
-        if "lockAction" not in message and "doorState" not in message:
-            return False
-
-        # Get current state from message
-        current_state = {
-            "lockAction": message.get("lockAction", ""),
-            "doorState": message.get("doorState", ""),
-        }
-
+        """Check if a push message represents unchanged state."""
+        # Build state key based on source - different sources track state separately
+        state_key = f"{device_id}:{source}"
         # Get last known state
-        last_state = self._last_websocket_state.get(device_id)
+        last_state = self._last_push_state.get(state_key)
+
+        # Get relevant state fields based on source
+        if source == Source.WEBSOCKET:
+            # WebSocket uses lockAction and doorState
+            if "lockAction" not in message and "doorState" not in message:
+                return False
+            current_state = {
+                "lock": message.get("lockAction", ""),
+                "door": message.get("doorState", ""),
+            }
+        else:  # PubNub
+            # PubNub uses status and doorState
+            if "status" not in message and "doorState" not in message:
+                return False
+            current_state = {
+                "lock": message.get("status", ""),
+                "door": message.get("doorState", ""),
+            }
+            # If all activities are status updates and we have a last state,
+            # check if the state is unchanged but don't update tracking
+            if last_state and all(activity.is_status for activity in activities):
+                # Status update with changed state or no previous state - don't track it
+                return last_state == current_state
 
         # If we have a previous state and it matches current state, it's unchanged
         if last_state and last_state == current_state:
             return True
 
-        # Update the last known state
-        self._last_websocket_state[device_id] = current_state
+        # Update the last known state (only for real actions, not status updates)
+        self._last_push_state[state_key] = current_state
         return False
 
     def _remove_inoperative_locks(self) -> None:
