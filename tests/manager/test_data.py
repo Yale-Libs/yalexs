@@ -10,6 +10,7 @@ from aiohttp import ClientError, ClientResponseError
 from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
 from yalexs.capabilities import CapabilitiesResponse
 from yalexs.const import Brand
+from yalexs.exceptions import YaleApiError
 from yalexs.lock import LockDetail
 from yalexs.manager.data import YaleXSData
 
@@ -692,19 +693,27 @@ async def test_fetch_lock_capabilities_handles_404_and_409_errors(
     # Mock API to raise 404 and 409 errors
     async def mock_get_capabilities(token: str, serial: str) -> None:
         if serial == "SERIAL404":
-            raise ClientResponseError(
-                request_info=Mock(),
-                history=(),
-                status=404,
-                message="Device info not found",
+            error = YaleApiError(
+                "The operation failed with error code 404: Device info not found.",
+                ClientResponseError(
+                    request_info=Mock(),
+                    history=(),
+                    status=404,
+                    message="Device info not found",
+                ),
             )
+            raise error
         if serial == "SERIAL409":
-            raise ClientResponseError(
-                request_info=Mock(),
-                history=(),
-                status=409,
-                message="Cannot infer deviceType from serial number",
+            error = YaleApiError(
+                "The operation failed with error code 409: Cannot infer deviceType from serial number.",
+                ClientResponseError(
+                    request_info=Mock(),
+                    history=(),
+                    status=409,
+                    message="Cannot infer deviceType from serial number.",
+                ),
             )
+            raise error
 
     mock_api.async_get_lock_capabilities = AsyncMock(side_effect=mock_get_capabilities)
 

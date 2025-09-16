@@ -19,7 +19,7 @@ from ..activity import Activity, ActivityTypes, Source
 from ..backports.tasks import create_eager_task
 from ..const import Brand
 from ..doorbell import ContentTokenExpired, Doorbell, DoorbellDetail
-from ..exceptions import AugustApiAIOHTTPError
+from ..exceptions import AugustApiAIOHTTPError, YaleApiError
 from ..lock import Lock, LockDetail
 from ..pubnub_activity import activities_from_pubnub_message
 from ..pubnub_async import AugustPubNub
@@ -172,7 +172,7 @@ class YaleXSData(SubscriberMixin):
                     lock_detail.device_name,
                     capabilities.get("lock", {}).get("unlatch", False),
                 )
-            except ClientResponseError as ex:
+            except YaleApiError as ex:
                 # 409 Conflict means the API cannot determine device type from serial
                 # 404 Not Found means device info not found
                 # These can happen for older devices, just log debug and continue
@@ -181,14 +181,14 @@ class YaleXSData(SubscriberMixin):
                         "Cannot fetch capabilities for lock %s (HTTP %s): %s",
                         lock_detail.device_name,
                         ex.status,
-                        ex.message,
+                        str(ex),
                     )
                 else:
                     _LOGGER.warning(
                         "Failed to fetch capabilities for lock %s (HTTP %s): %s",
                         lock_detail.device_name,
                         ex.status,
-                        ex.message,
+                        str(ex),
                     )
             except (ClientError, TimeoutError) as ex:
                 _LOGGER.warning(
