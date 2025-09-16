@@ -5,6 +5,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from aiohttp import ClientError
 
 from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
 from yalexs.capabilities import CapabilitiesResponse
@@ -460,7 +461,10 @@ async def test_fetch_lock_capabilities_with_error(
     }
 
     # Mock API to raise an error
-    mock_api.async_get_lock_capabilities = AsyncMock(side_effect=Exception("API Error"))
+
+    mock_api.async_get_lock_capabilities = AsyncMock(
+        side_effect=ClientError("API Error")
+    )
 
     # Call the method with logging
     with caplog.at_level(logging.WARNING):
