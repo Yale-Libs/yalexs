@@ -369,8 +369,9 @@ async def test_fetch_lock_capabilities() -> None:
     mock_api = Mock()
     mock_gateway.api = mock_api
 
-    # Create YaleXSData instance
+    # Create YaleXSData instance with mocked abstract method
     data = YaleXSData(mock_gateway)
+    data.async_offline_key_discovered = Mock()
 
     # Create mock lock details
     lock_detail_1 = Mock(spec=LockDetail)
@@ -444,8 +445,9 @@ async def test_fetch_lock_capabilities_with_error(
     mock_api = Mock()
     mock_gateway.api = mock_api
 
-    # Create YaleXSData instance
+    # Create YaleXSData instance with mocked abstract method
     data = YaleXSData(mock_gateway)
+    data.async_offline_key_discovered = Mock()
 
     # Create mock lock detail
     lock_detail = Mock(spec=LockDetail)
@@ -493,8 +495,9 @@ async def test_fetch_lock_capabilities_skips_non_locks() -> None:
     mock_api = Mock()
     mock_gateway.api = mock_api
 
-    # Create YaleXSData instance
+    # Create YaleXSData instance with mocked abstract method
     data = YaleXSData(mock_gateway)
+    data.async_offline_key_discovered = Mock()
 
     # Create mock lock detail
     lock_detail = Mock(spec=LockDetail)
@@ -544,8 +547,9 @@ async def test_fetch_lock_capabilities_sequential_execution() -> None:
     mock_api = Mock()
     mock_gateway.api = mock_api
 
-    # Create YaleXSData instance
+    # Create YaleXSData instance with mocked abstract method
     data = YaleXSData(mock_gateway)
+    data.async_offline_key_discovered = Mock()
 
     # Create mock lock details
     lock_detail_1 = Mock(spec=LockDetail)

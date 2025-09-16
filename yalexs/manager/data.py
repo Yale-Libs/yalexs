@@ -114,8 +114,9 @@ class YaleXSData(SubscriberMixin):
         self._remove_inoperative_locks()
         self._remove_inoperative_doorbells()
 
-        # Fetch capabilities for all locks
-        await self._async_fetch_lock_capabilities()
+        # Fetch capabilities for locks (only for Yale brands)
+        if self.brand in (Brand.YALE_GLOBAL, Brand.YALE_HOME):
+            await self._async_fetch_lock_capabilities()
 
         await self.async_setup_activity_stream()
 
@@ -171,6 +172,22 @@ class YaleXSData(SubscriberMixin):
                     lock_detail.device_name,
                     capabilities.get("lock", {}).get("unlatch", False),
                 )
+            except ClientResponseError as ex:
+                # 409 Conflict means the API cannot determine device type from serial
+                # This can happen for older devices, just log debug and continue
+                if ex.status == 409:
+                    _LOGGER.debug(
+                        "Cannot fetch capabilities for lock %s: %s",
+                        lock_detail.device_name,
+                        ex.message,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "Failed to fetch capabilities for lock %s (HTTP %s): %s",
+                        lock_detail.device_name,
+                        ex.status,
+                        ex.message,
+                    )
             except (ClientError, TimeoutError) as ex:
                 _LOGGER.warning(
                     "Failed to fetch capabilities for lock %s: %s",
