@@ -67,6 +67,7 @@ API_WEBSOCKET_SUBSCRIBERS_WITH_SUBSCRIBER_ID = "/websocket/subscribers/{subscrib
 API_GET_ALARMS_URL = "/users/alarms/mine"
 API_GET_ALARM_DEVICES_URL = "/alarms/{alarm_id}/devices"
 API_PUT_ALARM_URL = "/alarms/{alarm_id}/state/{arm_state}"
+API_GET_CAPABILITIES_URL = "/devices/capabilities"
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -335,6 +336,15 @@ class ApiCommon:
         return {
             **self._build_base_request(access_token),
             "url": self.get_brand_url(API_GET_PINS_URL.format(lock_id=lock_id)),
+        }
+
+    def _build_get_capabilities_request(
+        self, access_token: str, serial_number: str
+    ) -> dict[str, Any]:
+        return {
+            **self._build_base_request(access_token),
+            "url": self.get_brand_url(API_GET_CAPABILITIES_URL),
+            "params": {"serialNumber": serial_number, "topLevelHost": "true"},
         }
 
     def _build_refresh_access_token_request(self, access_token: str) -> dict[str, Any]:

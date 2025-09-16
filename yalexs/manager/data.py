@@ -113,6 +113,10 @@ class YaleXSData(SubscriberMixin):
         # detail being None all over the place
         self._remove_inoperative_locks()
         self._remove_inoperative_doorbells()
+
+        # Fetch capabilities for all locks
+        await self._async_fetch_lock_capabilities()
+
         await self.async_setup_activity_stream()
 
         if self._locks_by_id and self.brand is not Brand.YALE_GLOBAL:
@@ -144,6 +148,35 @@ class YaleXSData(SubscriberMixin):
         push_callback = partial(self.async_push_message, source=push_source)
         push.subscribe(push_callback)
         self._push_unsub = await push.run(user_data["UserID"], self.brand)
+
+    async def _async_fetch_lock_capabilities(self) -> None:
+        """Fetch capabilities for all locks from the API."""
+        token = await self._gateway.async_get_access_token()
+
+        # Fetch capabilities for each lock in series to keep API load low
+        for lock_id, lock_detail in self._device_detail_by_id.items():
+            if lock_id not in self._locks_by_id or not isinstance(
+                lock_detail, LockDetail
+            ):
+                continue
+
+            # lock_id is the serial_number for locks
+            try:
+                capabilities = await self._api.async_get_lock_capabilities(
+                    token, lock_id
+                )
+                lock_detail.set_capabilities(capabilities)
+                _LOGGER.debug(
+                    "Fetched capabilities for lock %s: unlatch=%s",
+                    lock_detail.device_name,
+                    capabilities.get("lock", {}).get("unlatch", False),
+                )
+            except (ClientError, TimeoutError) as ex:
+                _LOGGER.warning(
+                    "Failed to fetch capabilities for lock %s: %s",
+                    lock_detail.device_name,
+                    ex,
+                )
 
     async def _async_initial_sync(self) -> None:
         """Attempt to request an initial sync."""

@@ -16,6 +16,7 @@ import yalexs.activity
 from yalexs import api_async
 from yalexs.api_async import ApiAsync, _raise_response_exceptions
 from yalexs.api_common import (
+    API_GET_CAPABILITIES_URL,
     API_GET_DOORBELL_URL,
     API_GET_DOORBELLS_URL,
     API_GET_HOUSE_ACTIVITIES_URL,
@@ -461,6 +462,56 @@ class TestApiAsync(aiounittest.AsyncTestCase):
         )
 
         assert lock.unlatch_supported is True
+
+    @aioresponses()
+    async def test_async_get_lock_capabilities(self, mock):
+        capabilities_response = {
+            "lock": {
+                "concurrentBLE": 2,
+                "batteryType": "AA",
+                "doorSense": True,
+                "hasMagnetometer": False,
+                "hasIntegratedWiFi": False,
+                "scheduledSmartAlerts": True,
+                "standalone": False,
+                "bluetooth": True,
+                "slotRange": None,
+                "integratedKeypad": True,
+                "entryCodeSlots": True,
+                "pinSlotMax": 100,
+                "pinSlotMin": 1,
+                "supportsRFID": True,
+                "supportsRFIDLegacy": False,
+                "supportsRFIDCredential": True,
+                "supportsRFIDOnlyAccess": True,
+                "supportsRFIDWithCode": False,
+                "supportsSecureMode": False,
+                "supportsSecureModeCodeDisable": False,
+                "supportsSecureModeMobileControl": False,
+                "supportsFingerprintCredential": True,
+                "supportsDeliveryMode": False,
+                "supportsSchedulePerUser": True,
+                "supportsFingerprintOnlyAccess": True,
+                "batteryLifeMS": 21513600000,
+                "supportedPartners": [],
+                "unlatch": True,
+            }
+        }
+
+        serial_number = "TEST123"
+        mock.get(
+            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_CAPABILITIES_URL)
+            + f"?serialNumber={serial_number}&topLevelHost=true",
+            payload=capabilities_response,
+        )
+
+        api = ApiAsync(ClientSession())
+        capabilities = await api.async_get_lock_capabilities(
+            ACCESS_TOKEN, serial_number
+        )
+
+        self.assertEqual(capabilities, capabilities_response)
+        self.assertTrue(capabilities["lock"]["unlatch"])
 
     @aioresponses()
     async def test_async_get_v2_lock_detail_bridge_online(self, mock):

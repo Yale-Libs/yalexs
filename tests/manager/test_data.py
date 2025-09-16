@@ -2,9 +2,13 @@
 
 import logging
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
+from yalexs.capabilities import CapabilitiesResponse
+from yalexs.lock import LockDetail
 from yalexs.manager.data import YaleXSData
 
 
@@ -352,3 +356,230 @@ class TestPushStateTracking:
 
             # Verify house refresh was NOT scheduled (because unchanged)
             assert not data.activity_stream.async_schedule_house_id_refresh.called
+
+
+@pytest.mark.asyncio
+async def test_fetch_lock_capabilities() -> None:
+    """Test that lock capabilities are fetched and set correctly."""
+    # Create mock gateway and API
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test-token")
+
+    mock_api = Mock()
+    mock_gateway.api = mock_api
+
+    # Create YaleXSData instance
+    data = YaleXSData(mock_gateway)
+
+    # Create mock lock details
+    lock_detail_1 = Mock(spec=LockDetail)
+    lock_detail_1.device_name = "Front Door"
+    lock_detail_1.set_capabilities = Mock()
+
+    lock_detail_2 = Mock(spec=LockDetail)
+    lock_detail_2.device_name = "Back Door"
+    lock_detail_2.set_capabilities = Mock()
+
+    # Set up device details
+    # Note: lock_id is the serial number for locks
+    data._device_detail_by_id = {
+        "SERIAL1": lock_detail_1,
+        "SERIAL2": lock_detail_2,
+        "doorbell1": Mock(),  # Not a lock, should be skipped
+    }
+    data._locks_by_id = {
+        "SERIAL1": Mock(),
+        "SERIAL2": Mock(),
+    }
+
+    # Mock API responses
+    capabilities_1: CapabilitiesResponse = {
+        "lock": {
+            "unlatch": True,
+            "doorSense": True,
+            "batteryType": "AA",
+        }
+    }
+    capabilities_2: CapabilitiesResponse = {
+        "lock": {
+            "unlatch": False,
+            "doorSense": False,
+            "batteryType": "CR123",
+        }
+    }
+
+    # Configure mock API
+    async def mock_get_capabilities(token: str, serial: str) -> CapabilitiesResponse:
+        if serial == "SERIAL1":
+            return capabilities_1
+        if serial == "SERIAL2":
+            return capabilities_2
+        raise ValueError(f"Unknown serial: {serial}")
+
+    mock_api.async_get_lock_capabilities = AsyncMock(side_effect=mock_get_capabilities)
+
+    # Call the method
+    await data._async_fetch_lock_capabilities()
+
+    # Verify API was called with correct parameters
+    assert mock_api.async_get_lock_capabilities.call_count == 2
+    mock_api.async_get_lock_capabilities.assert_any_call("test-token", "SERIAL1")
+    mock_api.async_get_lock_capabilities.assert_any_call("test-token", "SERIAL2")
+
+    # Verify capabilities were set on lock details
+    lock_detail_1.set_capabilities.assert_called_once_with(capabilities_1)
+    lock_detail_2.set_capabilities.assert_called_once_with(capabilities_2)
+
+
+@pytest.mark.asyncio
+async def test_fetch_lock_capabilities_with_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test that capability fetch errors are handled gracefully."""
+    # Create mock gateway and API
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test-token")
+
+    mock_api = Mock()
+    mock_gateway.api = mock_api
+
+    # Create YaleXSData instance
+    data = YaleXSData(mock_gateway)
+
+    # Create mock lock detail
+    lock_detail = Mock(spec=LockDetail)
+    lock_detail.device_name = "Front Door"
+    lock_detail.set_capabilities = Mock()
+
+    # Set up device details (lock_id is serial number)
+    data._device_detail_by_id = {
+        "SERIAL1": lock_detail,
+    }
+    data._locks_by_id = {
+        "SERIAL1": Mock(),
+    }
+
+    # Mock API to raise an error
+    mock_api.async_get_lock_capabilities = AsyncMock(side_effect=Exception("API Error"))
+
+    # Call the method with logging
+    with caplog.at_level(logging.WARNING):
+        await data._async_fetch_lock_capabilities()
+
+    # Verify API was called
+    mock_api.async_get_lock_capabilities.assert_called_once_with(
+        "test-token", "SERIAL1"
+    )
+
+    # Verify capabilities were NOT set due to error
+    lock_detail.set_capabilities.assert_not_called()
+
+    # Verify error was logged
+    assert "Failed to fetch capabilities for lock Front Door" in caplog.text
+    assert "API Error" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_lock_capabilities_skips_non_locks() -> None:
+    """Test that non-lock devices are skipped when fetching capabilities."""
+    # Create mock gateway and API
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test-token")
+
+    mock_api = Mock()
+    mock_gateway.api = mock_api
+
+    # Create YaleXSData instance
+    data = YaleXSData(mock_gateway)
+
+    # Create mock lock detail
+    lock_detail = Mock(spec=LockDetail)
+    lock_detail.device_name = "Front Door"
+    lock_detail.set_capabilities = Mock()
+
+    # Set up device details with mixed devices
+    data._device_detail_by_id = {
+        "SERIAL1": lock_detail,  # This is a lock
+        "doorbell1": Mock(),  # This is not a lock
+        "doorbell2": Mock(),  # This is not a lock
+    }
+    data._locks_by_id = {
+        "SERIAL1": Mock(),  # Only this one is a lock
+    }
+
+    # Mock API response
+    capabilities: CapabilitiesResponse = {
+        "lock": {
+            "unlatch": True,
+            "doorSense": True,
+            "batteryType": "AA",
+        }
+    }
+
+    mock_api.async_get_lock_capabilities = AsyncMock(return_value=capabilities)
+
+    # Call the method
+    await data._async_fetch_lock_capabilities()
+
+    # Verify API was called only once (for the lock, not the doorbells)
+    mock_api.async_get_lock_capabilities.assert_called_once_with(
+        "test-token", "SERIAL1"
+    )
+
+    # Verify capabilities were set only on the lock
+    lock_detail.set_capabilities.assert_called_once_with(capabilities)
+
+
+@pytest.mark.asyncio
+async def test_fetch_lock_capabilities_sequential_execution() -> None:
+    """Test that capabilities are fetched sequentially, not in parallel."""
+    # Create mock gateway and API
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test-token")
+
+    mock_api = Mock()
+    mock_gateway.api = mock_api
+
+    # Create YaleXSData instance
+    data = YaleXSData(mock_gateway)
+
+    # Create mock lock details
+    lock_detail_1 = Mock(spec=LockDetail)
+    lock_detail_1.device_name = "Front Door"
+    lock_detail_1.set_capabilities = Mock()
+
+    lock_detail_2 = Mock(spec=LockDetail)
+    lock_detail_2.device_name = "Back Door"
+    lock_detail_2.set_capabilities = Mock()
+
+    lock_detail_3 = Mock(spec=LockDetail)
+    lock_detail_3.device_name = "Side Door"
+    lock_detail_3.set_capabilities = Mock()
+
+    # Set up device details
+    data._device_detail_by_id = {
+        "SERIAL1": lock_detail_1,
+        "SERIAL2": lock_detail_2,
+        "SERIAL3": lock_detail_3,
+    }
+    data._locks_by_id = {
+        "SERIAL1": Mock(),
+        "SERIAL2": Mock(),
+        "SERIAL3": Mock(),
+    }
+
+    # Track call order
+    call_order: list[str] = []
+
+    async def mock_get_capabilities(token: str, serial: str) -> CapabilitiesResponse:
+        call_order.append(serial)
+        return {"lock": {"unlatch": True}}
+
+    mock_api.async_get_lock_capabilities = AsyncMock(side_effect=mock_get_capabilities)
+
+    # Call the method
+    await data._async_fetch_lock_capabilities()
+
+    # Verify all were called in sequence
+    assert call_order == ["SERIAL1", "SERIAL2", "SERIAL3"]
+    assert mock_api.async_get_lock_capabilities.call_count == 3
