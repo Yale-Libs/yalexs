@@ -42,7 +42,7 @@ propcache = ">=0.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8"
-pytest-cov = ">=3,<7"
+pytest-cov = ">=3,<8"
 aioresponses = "^0.7.6"
 requests-mock = "^1.12.1"
 aiounittest = "^1.4.2"
