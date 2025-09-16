@@ -9,6 +9,7 @@ from aiohttp import ClientError
 
 from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
 from yalexs.capabilities import CapabilitiesResponse
+from yalexs.const import Brand
 from yalexs.lock import LockDetail
 from yalexs.manager.data import YaleXSData
 
@@ -375,6 +376,7 @@ async def test_fetch_lock_capabilities() -> None:
 
     mock_api = Mock()
     mock_gateway.api = mock_api
+    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
     # Create TestYaleXSData instance
     data = TestYaleXSData(mock_gateway)
@@ -450,6 +452,7 @@ async def test_fetch_lock_capabilities_with_error(
 
     mock_api = Mock()
     mock_gateway.api = mock_api
+    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
     # Create TestYaleXSData instance
     data = TestYaleXSData(mock_gateway)
@@ -499,6 +502,7 @@ async def test_fetch_lock_capabilities_skips_non_locks() -> None:
 
     mock_api = Mock()
     mock_gateway.api = mock_api
+    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
     # Create TestYaleXSData instance
     data = TestYaleXSData(mock_gateway)
@@ -550,6 +554,7 @@ async def test_fetch_lock_capabilities_sequential_execution() -> None:
 
     mock_api = Mock()
     mock_gateway.api = mock_api
+    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
     # Create TestYaleXSData instance
     data = TestYaleXSData(mock_gateway)
