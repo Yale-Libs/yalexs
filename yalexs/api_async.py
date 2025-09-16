@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from http import HTTPStatus
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .capabilities import CapabilitiesResponse
 
 from aiohttp import (
     ClientConnectionError,
@@ -236,6 +239,14 @@ class ApiAsync(ApiCommon):
         json_dict = await response.json()
 
         return [Pin(pin_json) for pin_json in json_dict.get("loaded", [])]
+
+    async def async_get_lock_capabilities(
+        self, access_token: str, serial_number: str
+    ) -> CapabilitiesResponse:
+        response = await self._async_dict_to_api(
+            self._build_get_capabilities_request(access_token, serial_number)
+        )
+        return await response.json()
 
     async def _async_call_lock_operation(
         self, url_str: str, access_token: str, lock_id: str

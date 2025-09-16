@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from ._compat import cached_property
 from .bridge import BridgeDetail, BridgeStatus
@@ -9,6 +10,9 @@ from .device import Device, DeviceDetail
 from .keypad import KeypadDetail
 from .time import parse_datetime
 from .users import cache_user_info
+
+if TYPE_CHECKING:
+    from .capabilities import CapabilitiesResponse
 
 LOCKED_STATUS = ("lock", "locked", "kAugLockState_Locked", "kAugLockState_SecureMode")
 LOCKING_STATUS = ("kAugLockState_Locking",)
@@ -109,6 +113,7 @@ class LockDetail(DeviceDetail):
         if "skuNumber" in data:
             self._model = data["skuNumber"]
         self._data = data
+        self._capabilities: CapabilitiesResponse | None = None
 
     @cached_property
     def model(self):
@@ -120,6 +125,10 @@ class LockDetail(DeviceDetail):
 
     @cached_property
     def unlatch_supported(self) -> bool:
+        # Check capabilities first if available
+        if self._capabilities and "lock" in self._capabilities:
+            return self._capabilities["lock"].get("unlatch", False)
+        # Fall back to type-based check
         return self._data["Type"] in UNLATCH_MODEL_TYPES
 
     @cached_property
@@ -212,6 +221,12 @@ class LockDetail(DeviceDetail):
     def get_user(self, user_id):
         """Lookup user data by id."""
         return self._data.get("users", {}).get(user_id)
+
+    def set_capabilities(self, capabilities: CapabilitiesResponse) -> None:
+        """Set the lock capabilities."""
+        self._capabilities = capabilities
+        # Clear the cached unlatch_supported property since it may have changed
+        self.__dict__.pop("unlatch_supported", None)
 
     @cached_property
     def offline_keys(self) -> dict:
