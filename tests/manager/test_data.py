@@ -15,8 +15,8 @@ from yalexs.lock import LockDetail
 from yalexs.manager.data import YaleXSData
 
 
-class TestYaleXSData(YaleXSData):
-    """Test implementation of YaleXSData with mocked abstract method."""
+class MockYaleXSData(YaleXSData):
+    """Mock implementation of YaleXSData with mocked abstract method."""
 
     def async_offline_key_discovered(self, detail) -> None:
         """Mock implementation of abstract method."""
@@ -379,8 +379,8 @@ async def test_fetch_lock_capabilities() -> None:
     mock_gateway.api = mock_api
     mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
-    # Create TestYaleXSData instance
-    data = TestYaleXSData(mock_gateway)
+    # Create MockYaleXSData instance
+    data = MockYaleXSData(mock_gateway)
 
     # Create mock lock details
     lock_detail_1 = Mock(spec=LockDetail)
@@ -455,8 +455,8 @@ async def test_fetch_lock_capabilities_with_error(
     mock_gateway.api = mock_api
     mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
-    # Create TestYaleXSData instance
-    data = TestYaleXSData(mock_gateway)
+    # Create MockYaleXSData instance
+    data = MockYaleXSData(mock_gateway)
 
     # Create mock lock detail
     lock_detail = Mock(spec=LockDetail)
@@ -505,8 +505,8 @@ async def test_fetch_lock_capabilities_skips_non_locks() -> None:
     mock_gateway.api = mock_api
     mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
-    # Create TestYaleXSData instance
-    data = TestYaleXSData(mock_gateway)
+    # Create MockYaleXSData instance
+    data = MockYaleXSData(mock_gateway)
 
     # Create mock lock detail
     lock_detail = Mock(spec=LockDetail)
@@ -557,8 +557,8 @@ async def test_fetch_lock_capabilities_sequential_execution() -> None:
     mock_gateway.api = mock_api
     mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
-    # Create TestYaleXSData instance
-    data = TestYaleXSData(mock_gateway)
+    # Create MockYaleXSData instance
+    data = MockYaleXSData(mock_gateway)
 
     # Create mock lock details
     lock_detail_1 = Mock(spec=LockDetail)
@@ -615,8 +615,8 @@ async def test_august_brand_does_not_fetch_capabilities():
     mock_gateway.api = mock_api
     mock_gateway.api.brand = Brand.AUGUST  # Set August brand for API
 
-    # Create TestYaleXSData instance
-    data = TestYaleXSData(mock_gateway)
+    # Create MockYaleXSData instance
+    data = MockYaleXSData(mock_gateway)
 
     # Set up test locks
     lock1 = {
@@ -668,8 +668,8 @@ async def test_fetch_lock_capabilities_handles_404_and_409_errors(
     mock_gateway.api = mock_api
     mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
 
-    # Create TestYaleXSData instance
-    data = TestYaleXSData(mock_gateway)
+    # Create MockYaleXSData instance
+    data = MockYaleXSData(mock_gateway)
 
     # Create mock lock details
     lock_detail_404 = Mock(spec=LockDetail)
@@ -734,3 +734,155 @@ async def test_fetch_lock_capabilities_handles_404_and_409_errors(
     # Verify no warning logs for these expected errors
     warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert len(warning_records) == 0
+
+
+@pytest.mark.asyncio
+async def test_fetch_lock_capabilities_handles_other_errors_with_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test that non-404/409 errors are logged as warnings when fetching capabilities."""
+    # Create mock gateway and API
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test-token")
+
+    mock_api = Mock()
+    mock_gateway.api = mock_api
+    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+
+    # Create MockYaleXSData instance
+    data = MockYaleXSData(mock_gateway)
+
+    # Create mock lock details
+    lock_detail_401 = Mock(spec=LockDetail)
+    lock_detail_401.device_name = "Lock 401"
+    lock_detail_401.set_capabilities = Mock()
+
+    lock_detail_500 = Mock(spec=LockDetail)
+    lock_detail_500.device_name = "Lock 500"
+    lock_detail_500.set_capabilities = Mock()
+
+    # Set up device details
+    data._device_detail_by_id = {
+        "SERIAL401": lock_detail_401,
+        "SERIAL500": lock_detail_500,
+    }
+    data._locks_by_id = {
+        "SERIAL401": Mock(),
+        "SERIAL500": Mock(),
+    }
+
+    # Mock API to raise 401 and 500 errors
+    async def mock_get_capabilities(token: str, serial: str) -> None:
+        if serial == "SERIAL401":
+            error = YaleApiError(
+                "The operation failed with error code 401: Unauthorized.",
+                ClientResponseError(
+                    request_info=Mock(),
+                    history=(),
+                    status=401,
+                    message="Unauthorized",
+                ),
+            )
+            raise error
+        if serial == "SERIAL500":
+            error = YaleApiError(
+                "The operation failed with error code 500: Internal Server Error.",
+                ClientResponseError(
+                    request_info=Mock(),
+                    history=(),
+                    status=500,
+                    message="Internal Server Error",
+                ),
+            )
+            raise error
+
+    mock_api.async_get_lock_capabilities = AsyncMock(side_effect=mock_get_capabilities)
+
+    # Call the method with warning logging
+    with caplog.at_level(logging.WARNING):
+        await data._async_fetch_lock_capabilities()
+
+    # Verify API was called for both locks
+    assert mock_api.async_get_lock_capabilities.call_count == 2
+
+    # Verify capabilities were NOT set due to errors
+    lock_detail_401.set_capabilities.assert_not_called()
+    lock_detail_500.set_capabilities.assert_not_called()
+
+    # Verify warning messages were logged for non-404/409 errors
+    assert "Failed to fetch capabilities for lock Lock 401 (HTTP 401)" in caplog.text
+    assert "Failed to fetch capabilities for lock Lock 500 (HTTP 500)" in caplog.text
+
+    # Verify these are logged as warnings, not debug
+    warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warning_records) == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_lock_capabilities_handles_network_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test that network errors like ClientError and TimeoutError are handled gracefully."""
+    # Create mock gateway and API
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test-token")
+
+    mock_api = Mock()
+    mock_gateway.api = mock_api
+    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+
+    # Create MockYaleXSData instance
+    data = MockYaleXSData(mock_gateway)
+
+    # Create mock lock details
+    lock_detail_timeout = Mock(spec=LockDetail)
+    lock_detail_timeout.device_name = "Lock Timeout"
+    lock_detail_timeout.set_capabilities = Mock()
+
+    lock_detail_network = Mock(spec=LockDetail)
+    lock_detail_network.device_name = "Lock Network"
+    lock_detail_network.set_capabilities = Mock()
+
+    # Set up device details
+    data._device_detail_by_id = {
+        "SERIAL_TIMEOUT": lock_detail_timeout,
+        "SERIAL_NETWORK": lock_detail_network,
+    }
+    data._locks_by_id = {
+        "SERIAL_TIMEOUT": Mock(),
+        "SERIAL_NETWORK": Mock(),
+    }
+
+    # Mock API to raise TimeoutError and ClientError
+    async def mock_get_capabilities(token: str, serial: str) -> None:
+        if serial == "SERIAL_TIMEOUT":
+            raise TimeoutError("Request timed out")
+        if serial == "SERIAL_NETWORK":
+            raise ClientError("Network error")
+
+    mock_api.async_get_lock_capabilities = AsyncMock(side_effect=mock_get_capabilities)
+
+    # Call the method with warning logging
+    with caplog.at_level(logging.WARNING):
+        await data._async_fetch_lock_capabilities()
+
+    # Verify API was called for both locks
+    assert mock_api.async_get_lock_capabilities.call_count == 2
+
+    # Verify capabilities were NOT set due to errors
+    lock_detail_timeout.set_capabilities.assert_not_called()
+    lock_detail_network.set_capabilities.assert_not_called()
+
+    # Verify warning messages were logged for network errors
+    assert (
+        "Failed to fetch capabilities for lock Lock Timeout: Request timed out"
+        in caplog.text
+    )
+    assert (
+        "Failed to fetch capabilities for lock Lock Network: Network error"
+        in caplog.text
+    )
+
+    # Verify these are logged as warnings
+    warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warning_records) == 2
