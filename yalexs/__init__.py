@@ -2,4 +2,4 @@
 
 __author__ = """J. Nick Koston"""
 __email__ = "nick@koston.org"
-__version__ = "9.0.1"
+__version__ = "9.1.0"
