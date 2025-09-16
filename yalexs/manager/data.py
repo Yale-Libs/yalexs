@@ -174,11 +174,13 @@ class YaleXSData(SubscriberMixin):
                 )
             except ClientResponseError as ex:
                 # 409 Conflict means the API cannot determine device type from serial
-                # This can happen for older devices, just log debug and continue
-                if ex.status == 409:
+                # 404 Not Found means device info not found
+                # These can happen for older devices, just log debug and continue
+                if ex.status in (404, 409):
                     _LOGGER.debug(
-                        "Cannot fetch capabilities for lock %s: %s",
+                        "Cannot fetch capabilities for lock %s (HTTP %s): %s",
                         lock_detail.device_name,
+                        ex.status,
                         ex.message,
                     )
                 else:
