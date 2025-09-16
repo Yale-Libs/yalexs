@@ -5,7 +5,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from aiohttp import ClientError
+from aiohttp import ClientError, ClientResponseError
 
 from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
 from yalexs.capabilities import CapabilitiesResponse
@@ -652,3 +652,76 @@ async def test_august_brand_does_not_fetch_capabilities():
 
     # Verify the capabilities method was NOT called for August brand
     assert mock_api.async_get_lock_capabilities.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_fetch_lock_capabilities_handles_404_and_409_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test that 404 and 409 errors are handled gracefully when fetching capabilities."""
+    # Create mock gateway and API
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test-token")
+
+    mock_api = Mock()
+    mock_gateway.api = mock_api
+    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+
+    # Create TestYaleXSData instance
+    data = TestYaleXSData(mock_gateway)
+
+    # Create mock lock details
+    lock_detail_404 = Mock(spec=LockDetail)
+    lock_detail_404.device_name = "Lock 404"
+    lock_detail_404.set_capabilities = Mock()
+
+    lock_detail_409 = Mock(spec=LockDetail)
+    lock_detail_409.device_name = "Lock 409"
+    lock_detail_409.set_capabilities = Mock()
+
+    # Set up device details
+    data._device_detail_by_id = {
+        "SERIAL404": lock_detail_404,
+        "SERIAL409": lock_detail_409,
+    }
+    data._locks_by_id = {
+        "SERIAL404": Mock(),
+        "SERIAL409": Mock(),
+    }
+
+    # Mock API to raise 404 and 409 errors
+    async def mock_get_capabilities(token: str, serial: str) -> None:
+        if serial == "SERIAL404":
+            raise ClientResponseError(
+                request_info=Mock(),
+                history=(),
+                status=404,
+                message="Device info not found",
+            )
+        if serial == "SERIAL409":
+            raise ClientResponseError(
+                request_info=Mock(),
+                history=(),
+                status=409,
+                message="Cannot infer deviceType from serial number",
+            )
+
+    mock_api.async_get_lock_capabilities = AsyncMock(side_effect=mock_get_capabilities)
+
+    # Call the method with debug logging
+    with caplog.at_level(logging.DEBUG):
+        await data._async_fetch_lock_capabilities()
+
+    # Verify API was called for both locks
+    assert mock_api.async_get_lock_capabilities.call_count == 2
+
+    # Verify capabilities were NOT set due to errors
+    lock_detail_404.set_capabilities.assert_not_called()
+    lock_detail_409.set_capabilities.assert_not_called()
+
+    # Verify debug messages were logged (not warnings)
+    assert "Cannot fetch capabilities for lock Lock 404 (HTTP 404)" in caplog.text
+    assert "Cannot fetch capabilities for lock Lock 409 (HTTP 409)" in caplog.text
+    # Verify no warning logs for these expected errors
+    warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warning_records) == 0
