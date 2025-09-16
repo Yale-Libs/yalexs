@@ -13,6 +13,13 @@ from yalexs.lock import LockDetail
 from yalexs.manager.data import YaleXSData
 
 
+class TestYaleXSData(YaleXSData):
+    """Test implementation of YaleXSData with mocked abstract method."""
+
+    def async_offline_key_discovered(self, detail) -> None:
+        """Mock implementation of abstract method."""
+
+
 class TestPushStateTracking:
     """Test push state tracking functionality."""
 
@@ -369,9 +376,8 @@ async def test_fetch_lock_capabilities() -> None:
     mock_api = Mock()
     mock_gateway.api = mock_api
 
-    # Create YaleXSData instance with mocked abstract method
-    data = YaleXSData(mock_gateway)
-    data.async_offline_key_discovered = Mock()
+    # Create TestYaleXSData instance
+    data = TestYaleXSData(mock_gateway)
 
     # Create mock lock details
     lock_detail_1 = Mock(spec=LockDetail)
@@ -445,9 +451,8 @@ async def test_fetch_lock_capabilities_with_error(
     mock_api = Mock()
     mock_gateway.api = mock_api
 
-    # Create YaleXSData instance with mocked abstract method
-    data = YaleXSData(mock_gateway)
-    data.async_offline_key_discovered = Mock()
+    # Create TestYaleXSData instance
+    data = TestYaleXSData(mock_gateway)
 
     # Create mock lock detail
     lock_detail = Mock(spec=LockDetail)
@@ -495,9 +500,8 @@ async def test_fetch_lock_capabilities_skips_non_locks() -> None:
     mock_api = Mock()
     mock_gateway.api = mock_api
 
-    # Create YaleXSData instance with mocked abstract method
-    data = YaleXSData(mock_gateway)
-    data.async_offline_key_discovered = Mock()
+    # Create TestYaleXSData instance
+    data = TestYaleXSData(mock_gateway)
 
     # Create mock lock detail
     lock_detail = Mock(spec=LockDetail)
@@ -547,9 +551,8 @@ async def test_fetch_lock_capabilities_sequential_execution() -> None:
     mock_api = Mock()
     mock_gateway.api = mock_api
 
-    # Create YaleXSData instance with mocked abstract method
-    data = YaleXSData(mock_gateway)
-    data.async_offline_key_discovered = Mock()
+    # Create TestYaleXSData instance
+    data = TestYaleXSData(mock_gateway)
 
     # Create mock lock details
     lock_detail_1 = Mock(spec=LockDetail)
