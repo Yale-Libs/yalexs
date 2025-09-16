@@ -604,12 +604,18 @@ async def test_fetch_lock_capabilities_sequential_execution() -> None:
 @pytest.mark.asyncio
 async def test_august_brand_does_not_fetch_capabilities():
     """Test that August brand does not fetch device capabilities."""
-    # Create test data with August brand
-    data = TestYaleXSData(Brand.AUGUST)  # August brand
+    # Create mock gateway with August brand
+    mock_gateway = AsyncMock()
+    mock_gateway.brand = Brand.AUGUST  # August brand
+    mock_gateway.access_token = "test-token"
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test-token")
 
-    # Mock API methods
-    mock_api = AsyncMock()
-    data.set_api(mock_api)
+    mock_api = Mock()
+    mock_gateway.api = mock_api
+    mock_gateway.api.brand = Brand.AUGUST  # Set August brand for API
+
+    # Create TestYaleXSData instance
+    data = TestYaleXSData(mock_gateway)
 
     # Set up test locks
     lock1 = {
