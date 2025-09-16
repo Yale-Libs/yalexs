@@ -599,3 +599,50 @@ async def test_fetch_lock_capabilities_sequential_execution() -> None:
     # Verify all were called in sequence
     assert call_order == ["SERIAL1", "SERIAL2", "SERIAL3"]
     assert mock_api.async_get_lock_capabilities.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_august_brand_does_not_fetch_capabilities():
+    """Test that August brand does not fetch device capabilities."""
+    # Create test data with August brand
+    data = TestYaleXSData(Brand.AUGUST)  # August brand
+
+    # Mock API methods
+    mock_api = AsyncMock()
+    data.set_api(mock_api)
+
+    # Set up test locks
+    lock1 = {
+        "LockID": "ABC1",
+        "LockName": "Lock 1",
+        "HouseID": "house1",
+        "SerialNumber": "SERIAL1",
+        "Type": 5,
+        "battery": 0.8,
+        "currentFirmwareVersion": "1.0.0",
+        "LockStatus": {"status": "locked"},
+    }
+    lock2 = {
+        "LockID": "ABC2",
+        "LockName": "Lock 2",
+        "HouseID": "house1",
+        "SerialNumber": "SERIAL2",
+        "Type": 17,
+        "battery": 0.9,
+        "currentFirmwareVersion": "1.0.0",
+        "LockStatus": {"status": "unlocked"},
+    }
+
+    data._lock_details = {
+        "ABC1": LockDetail(lock1),
+        "ABC2": LockDetail(lock2),
+    }
+
+    # Mock the capabilities fetch - should not be called
+    mock_api.async_get_lock_capabilities = AsyncMock()
+
+    # Call the method
+    await data._async_fetch_lock_capabilities()
+
+    # Verify the capabilities method was NOT called for August brand
+    assert mock_api.async_get_lock_capabilities.call_count == 0
