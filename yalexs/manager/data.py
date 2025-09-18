@@ -8,6 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Coroutine, Iterable, ValuesView
 from contextlib import suppress
 from datetime import datetime
+from enum import Enum
 from functools import partial
 from itertools import chain
 from typing import Any, ParamSpec, TypeVar
@@ -43,6 +44,13 @@ YALEXS_BLE_DOMAIN = "yalexs_ble"
 
 _R = TypeVar("_R")
 _P = ParamSpec("_P")
+
+
+class _PushUpdatesState(Enum):
+    """Push updates connection state."""
+
+    NOT_CONNECTED = "not_connected"
+    CONNECTED = "connected"
 
 
 def _save_live_attrs(lock_detail: DoorbellDetail | LockDetail) -> dict[str, Any]:
@@ -542,8 +550,8 @@ class YaleXSData(SubscriberMixin):
         # Base operation map - lock is always the same
         operation_map = {
             LockOperation.LOCK: {
-                "wait": self.async_lock,
-                "no_wait": self.async_lock_async,
+                _PushUpdatesState.NOT_CONNECTED: self.async_lock,
+                _PushUpdatesState.CONNECTED: self.async_lock_async,
             },
         }
 
@@ -552,33 +560,39 @@ class YaleXSData(SubscriberMixin):
         if detail and detail.unlatch_supported:
             # When unlatch is supported, swap unlock and open operations
             operation_map[LockOperation.UNLOCK] = {
-                "wait": self.async_unlatch,  # Swapped!
-                "no_wait": self.async_unlatch_async,
+                _PushUpdatesState.NOT_CONNECTED: self.async_unlatch,  # Swapped!
+                _PushUpdatesState.CONNECTED: self.async_unlatch_async,
             }
             operation_map[LockOperation.OPEN] = {
-                "wait": self.async_unlock,  # Swapped!
-                "no_wait": self.async_unlock_async,
+                _PushUpdatesState.NOT_CONNECTED: self.async_unlock,  # Swapped!
+                _PushUpdatesState.CONNECTED: self.async_unlock_async,
             }
         else:
             # Normal mapping when unlatch is not supported
             operation_map[LockOperation.UNLOCK] = {
-                "wait": self.async_unlock,
-                "no_wait": self.async_unlock_async,
+                _PushUpdatesState.NOT_CONNECTED: self.async_unlock,
+                _PushUpdatesState.CONNECTED: self.async_unlock_async,
             }
             operation_map[LockOperation.OPEN] = {
-                "wait": self.async_unlatch,
-                "no_wait": self.async_unlatch_async,
+                _PushUpdatesState.NOT_CONNECTED: self.async_unlatch,
+                _PushUpdatesState.CONNECTED: self.async_unlatch_async,
             }
 
         if operation not in operation_map:
             raise ValueError(f"Invalid operation: {operation}")
 
-        ops = operation_map[operation]
+        # Determine the push updates state
+        state = (
+            _PushUpdatesState.CONNECTED
+            if push_updates_connected
+            else _PushUpdatesState.NOT_CONNECTED
+        )
+        method = operation_map[operation][state]
 
         if push_updates_connected:
-            await ops["no_wait"](device_id, hyper_bridge)
+            await method(device_id, hyper_bridge)
             return []
-        return await ops["wait"](device_id)
+        return await method(device_id)
 
     async def _async_call_api_op_requires_bridge(
         self,
