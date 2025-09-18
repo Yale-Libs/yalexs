@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -11,7 +12,7 @@ from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
 from yalexs.capabilities import CapabilitiesResponse
 from yalexs.const import Brand
 from yalexs.exceptions import YaleApiError
-from yalexs.lock import LockDetail
+from yalexs.lock import LockDetail, LockOperation
 from yalexs.manager.data import YaleXSData
 
 
@@ -886,3 +887,286 @@ async def test_fetch_lock_capabilities_handles_network_errors(
     # Verify these are logged as warnings
     warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert len(warning_records) == 2
+
+
+@pytest.mark.asyncio
+async def test_async_operate_lock_wait_mode() -> None:
+    """Test async_operate_lock LOCK operation when waiting for response."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    # Mock the individual lock operation methods
+    data.async_lock = AsyncMock(return_value=["lock_activity"])
+    data.async_lock_async = AsyncMock(return_value="lock_request_id")
+
+    device_id = "test_device"
+
+    # Mock device detail without unlatch support
+    mock_detail = Mock(spec=LockDetail)
+    mock_detail.unlatch_supported = False
+    data.get_device_detail = Mock(return_value=mock_detail)
+
+    result = await data.async_operate_lock(
+        device_id, LockOperation.LOCK, push_updates_connected=False
+    )
+
+    assert result == ["lock_activity"]
+    data.async_lock.assert_called_once_with(device_id)
+    data.async_lock_async.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_operate_lock_push_mode() -> None:
+    """Test async_operate_lock LOCK operation with push updates (no wait)."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    # Mock the individual lock operation methods
+    data.async_lock = AsyncMock(return_value=["lock_activity"])
+    data.async_lock_async = AsyncMock(return_value="lock_request_id")
+
+    device_id = "test_device"
+
+    # Mock device detail without unlatch support
+    mock_detail = Mock(spec=LockDetail)
+    mock_detail.unlatch_supported = False
+    data.get_device_detail = Mock(return_value=mock_detail)
+
+    result = await data.async_operate_lock(
+        device_id, LockOperation.LOCK, push_updates_connected=True, hyper_bridge=True
+    )
+
+    assert result == []  # Returns empty list when not waiting
+    data.async_lock.assert_not_called()
+    data.async_lock_async.assert_called_once_with(device_id, True)
+
+
+@pytest.mark.asyncio
+async def test_async_operate_unlock_no_unlatch_support() -> None:
+    """Test async_operate_lock UNLOCK operation when device doesn't support unlatch."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    # Mock the individual lock operation methods
+    data.async_unlock = AsyncMock(return_value=["unlock_activity"])
+    data.async_unlatch = AsyncMock(return_value=["unlatch_activity"])
+
+    device_id = "test_device"
+
+    # Mock device detail without unlatch support
+    mock_detail = Mock(spec=LockDetail)
+    mock_detail.unlatch_supported = False
+    data.get_device_detail = Mock(return_value=mock_detail)
+
+    result = await data.async_operate_lock(
+        device_id, LockOperation.UNLOCK, push_updates_connected=False
+    )
+
+    assert result == ["unlock_activity"]
+    data.async_unlock.assert_called_once_with(device_id)
+    data.async_unlatch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_operate_unlock_with_unlatch_support() -> None:
+    """Test async_operate_lock UNLOCK operation when device supports unlatch (should call unlatch)."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    # Mock the individual lock operation methods
+    data.async_unlock = AsyncMock(return_value=["unlock_activity"])
+    data.async_unlatch = AsyncMock(return_value=["unlatch_activity"])
+
+    device_id = "test_device"
+
+    # Mock device detail WITH unlatch support
+    mock_detail = Mock(spec=LockDetail)
+    mock_detail.unlatch_supported = True
+    data.get_device_detail = Mock(return_value=mock_detail)
+
+    result = await data.async_operate_lock(
+        device_id, LockOperation.UNLOCK, push_updates_connected=False
+    )
+
+    # When unlatch is supported, UNLOCK should call unlatch!
+    assert result == ["unlatch_activity"]
+    data.async_unlatch.assert_called_once_with(device_id)
+    data.async_unlock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_operate_open_no_unlatch_support() -> None:
+    """Test async_operate_lock OPEN operation when device doesn't support unlatch."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    # Mock the individual lock operation methods
+    data.async_unlock = AsyncMock(return_value=["unlock_activity"])
+    data.async_unlatch = AsyncMock(return_value=["unlatch_activity"])
+
+    device_id = "test_device"
+
+    # Mock device detail without unlatch support
+    mock_detail = Mock(spec=LockDetail)
+    mock_detail.unlatch_supported = False
+    data.get_device_detail = Mock(return_value=mock_detail)
+
+    result = await data.async_operate_lock(
+        device_id, LockOperation.OPEN, push_updates_connected=False
+    )
+
+    assert result == ["unlatch_activity"]
+    data.async_unlatch.assert_called_once_with(device_id)
+    data.async_unlock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_operate_open_with_unlatch_support() -> None:
+    """Test async_operate_lock OPEN operation when device supports unlatch (should call unlock)."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    # Mock the individual lock operation methods
+    data.async_unlock = AsyncMock(return_value=["unlock_activity"])
+    data.async_unlatch = AsyncMock(return_value=["unlatch_activity"])
+
+    device_id = "test_device"
+
+    # Mock device detail WITH unlatch support
+    mock_detail = Mock(spec=LockDetail)
+    mock_detail.unlatch_supported = True
+    data.get_device_detail = Mock(return_value=mock_detail)
+
+    result = await data.async_operate_lock(
+        device_id, LockOperation.OPEN, push_updates_connected=False
+    )
+
+    # When unlatch is supported, OPEN should call unlock!
+    assert result == ["unlock_activity"]
+    data.async_unlock.assert_called_once_with(device_id)
+    data.async_unlatch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_operate_lock_all_operations_with_push() -> None:
+    """Test async_operate_lock all operations with push updates enabled."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    # Mock all async operation methods
+    data.async_lock_async = AsyncMock(return_value="lock_request_id")
+    data.async_unlock_async = AsyncMock(return_value="unlock_request_id")
+    data.async_unlatch_async = AsyncMock(return_value="unlatch_request_id")
+
+    device_id = "test_device"
+
+    # Mock device detail with unlatch support
+    mock_detail = Mock(spec=LockDetail)
+    mock_detail.unlatch_supported = True
+    data.get_device_detail = Mock(return_value=mock_detail)
+
+    # Test LOCK operation
+    result = await data.async_operate_lock(
+        device_id, LockOperation.LOCK, push_updates_connected=True
+    )
+    assert result == []
+    data.async_lock_async.assert_called_once_with(device_id, True)
+
+    # Reset mocks
+    data.async_lock_async.reset_mock()
+    data.async_unlock_async.reset_mock()
+    data.async_unlatch_async.reset_mock()
+
+    # Test UNLOCK (should call unlatch_async when unlatch supported)
+    result = await data.async_operate_lock(
+        device_id, LockOperation.UNLOCK, push_updates_connected=True
+    )
+    assert result == []
+    data.async_unlatch_async.assert_called_once_with(device_id, True)
+
+    # Reset mocks
+    data.async_lock_async.reset_mock()
+    data.async_unlock_async.reset_mock()
+    data.async_unlatch_async.reset_mock()
+
+    # Test OPEN (should call unlock_async when unlatch supported)
+    result = await data.async_operate_lock(
+        device_id, LockOperation.OPEN, push_updates_connected=True
+    )
+    assert result == []
+    data.async_unlock_async.assert_called_once_with(device_id, True)
+
+
+@pytest.mark.asyncio
+async def test_async_operate_lock_invalid_operation() -> None:
+    """Test async_operate_lock with invalid operation raises ValueError."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    device_id = "test_device"
+
+    # Mock device detail
+    mock_detail = Mock(spec=LockDetail)
+    mock_detail.unlatch_supported = False
+    data.get_device_detail = Mock(return_value=mock_detail)
+
+    # Create an invalid operation
+    invalid_op: Any = Mock()
+    invalid_op.value = "invalid"
+
+    with pytest.raises(ValueError, match="Invalid operation"):
+        await data.async_operate_lock(
+            device_id, invalid_op, push_updates_connected=False
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_operate_lock_no_device_detail() -> None:
+    """Test async_operate_lock when get_device_detail returns None."""
+    mock_gateway = Mock()
+    mock_gateway.async_get_access_token = AsyncMock(return_value="test_token")
+    mock_api = Mock()
+
+    data = MockYaleXSData(mock_gateway, mock_api)
+
+    # Mock the individual lock operation methods
+    data.async_unlock = AsyncMock(return_value=["unlock_activity"])
+    data.async_unlatch = AsyncMock(return_value=["unlatch_activity"])
+
+    device_id = "test_device"
+
+    # Mock get_device_detail to return None
+    data.get_device_detail = Mock(return_value=None)
+
+    result = await data.async_operate_lock(
+        device_id, LockOperation.UNLOCK, push_updates_connected=False
+    )
+
+    # Should use normal mapping (unlock -> unlock)
+    assert result == ["unlock_activity"]
+    data.async_unlock.assert_called_once_with(device_id)
+    data.async_unlatch.assert_not_called()

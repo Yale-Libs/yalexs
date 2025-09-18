@@ -274,6 +274,12 @@ class LockDoorStatus(Enum):
     DISABLED = "disabled"
 
 
+class LockOperation(Enum):
+    LOCK = "lock"
+    UNLOCK = "unlock"
+    OPEN = "open"
+
+
 def determine_lock_status(status: str) -> LockStatus:
     if status in LOCKED_STATUS:
         return LockStatus.LOCKED

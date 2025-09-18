@@ -20,7 +20,7 @@ from ..backports.tasks import create_eager_task
 from ..const import Brand
 from ..doorbell import ContentTokenExpired, Doorbell, DoorbellDetail
 from ..exceptions import AugustApiAIOHTTPError, YaleApiError
-from ..lock import Lock, LockDetail
+from ..lock import Lock, LockDetail, LockOperation
 from ..pubnub_activity import activities_from_pubnub_message
 from ..pubnub_async import AugustPubNub
 from .activity import ActivityStream
@@ -514,6 +514,71 @@ class YaleXSData(SubscriberMixin):
             device_id,
             hyper_bridge,
         )
+
+    async def async_operate_lock(
+        self,
+        device_id: str,
+        operation: LockOperation,
+        push_updates_connected: bool = False,
+        hyper_bridge: bool = True,
+    ) -> list[ActivityTypes]:
+        """Unified method to operate the lock (lock/unlock/open).
+
+        Args:
+            device_id: The device ID
+            operation: The operation type (LockOperation enum)
+            push_updates_connected: If True, use async operation that doesn't wait for response
+            hyper_bridge: Whether to use hyper bridge for async operations
+
+        Returns:
+            Activities list when waiting for response, or empty list when using push updates
+
+        Note:
+            When unlatch is supported, unlock and open operations are swapped:
+            - UNLOCK operation calls unlatch API
+            - OPEN operation calls unlock API
+
+        """
+        # Base operation map - lock is always the same
+        operation_map = {
+            LockOperation.LOCK: {
+                "wait": self.async_lock,
+                "no_wait": self.async_lock_async,
+            },
+        }
+
+        # Check if the device supports unlatching to determine unlock/open mapping
+        detail = self.get_device_detail(device_id)
+        if detail and detail.unlatch_supported:
+            # When unlatch is supported, swap unlock and open operations
+            operation_map[LockOperation.UNLOCK] = {
+                "wait": self.async_unlatch,  # Swapped!
+                "no_wait": self.async_unlatch_async,
+            }
+            operation_map[LockOperation.OPEN] = {
+                "wait": self.async_unlock,  # Swapped!
+                "no_wait": self.async_unlock_async,
+            }
+        else:
+            # Normal mapping when unlatch is not supported
+            operation_map[LockOperation.UNLOCK] = {
+                "wait": self.async_unlock,
+                "no_wait": self.async_unlock_async,
+            }
+            operation_map[LockOperation.OPEN] = {
+                "wait": self.async_unlatch,
+                "no_wait": self.async_unlatch_async,
+            }
+
+        if operation not in operation_map:
+            raise ValueError(f"Invalid operation: {operation}")
+
+        ops = operation_map[operation]
+
+        if push_updates_connected:
+            await ops["no_wait"](device_id, hyper_bridge)
+            return []
+        return await ops["wait"](device_id)
 
     async def _async_call_api_op_requires_bridge(
         self,
