@@ -4,7 +4,7 @@ import datetime
 import random
 import ssl
 from functools import cache
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 from .activity import (
     ACTION_BRIDGE_OFFLINE,
@@ -21,12 +21,12 @@ from .activity import (
 from .const import CONFIGURATION_URLS, Brand
 from .lock import LockDetail
 
-LockActivityTypes = Union[
-    LockOperationActivity, DoorOperationActivity, BridgeOperationActivity
-]
-DoorbellActivityTypes = Union[
-    DoorbellImageCaptureActivity, DoorbellMotionActivity, BridgeOperationActivity
-]
+LockActivityTypes = (
+    LockOperationActivity | DoorOperationActivity | BridgeOperationActivity
+)
+DoorbellActivityTypes = (
+    DoorbellImageCaptureActivity | DoorbellMotionActivity | BridgeOperationActivity
+)
 
 if TYPE_CHECKING:
     from .doorbell import DoorbellDetail
