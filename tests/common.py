@@ -3,10 +3,9 @@ from __future__ import annotations
 import asyncio
 import time
 from asyncio import AbstractEventLoop, TimerHandle
-from typing import Union
 
 _MONOTONIC_RESOLUTION = time.get_clock_info("monotonic").resolution
-ScheduledType = Union[TimerHandle, tuple[float, TimerHandle]]
+ScheduledType = TimerHandle | tuple[float, TimerHandle]
 
 
 def get_scheduled_timer_handles(loop: AbstractEventLoop) -> list[TimerHandle]:

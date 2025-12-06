@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Union
+from typing import Any
 
 from ._compat import cached_property
 from .backports.enum import StrEnum
@@ -605,15 +605,15 @@ class BridgeOperationActivity(Activity):
     _activity_type = ActivityType.BRIDGE_OPERATION
 
 
-ActivityTypes = Union[
-    DoorbellDingActivity,
-    DoorbellMotionActivity,
-    DoorbellImageCaptureActivity,
-    DoorbellViewActivity,
-    LockOperationActivity,
-    DoorOperationActivity,
-    BridgeOperationActivity,
-]
+ActivityTypes = (
+    DoorbellDingActivity
+    | DoorbellMotionActivity
+    | DoorbellImageCaptureActivity
+    | DoorbellViewActivity
+    | LockOperationActivity
+    | DoorOperationActivity
+    | BridgeOperationActivity
+)
 
 ACTIONS_TO_CLASS = (
     (ACTIVITY_ACTIONS_DOORBELL_DING, DoorbellDingActivity),
