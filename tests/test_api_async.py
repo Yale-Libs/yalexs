@@ -1274,14 +1274,14 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         except Exception as err:  # noqa: BLE001
             self.assertIsInstance(err, AugustApiAIOHTTPError)
 
-        ERROR_MAP = {
+        error_map = {
             560: "The operation failed with error code 560: 560.",
             422: "The operation failed because the bridge (connect) is offline: 422",
             423: "The operation failed because the bridge (connect) is in use: 423",
             408: "The operation timed out because the bridge (connect) failed to respond: 408",
         }
 
-        for status_code in ERROR_MAP:
+        for status_code in error_map:
             mocked_response = MockedResponse(
                 "get",
                 URL("http://code.any.tld"),
@@ -1298,7 +1298,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             try:
                 _raise_response_exceptions(mocked_response)
             except AugustApiAIOHTTPError as err:
-                self.assertEqual(str(err), ERROR_MAP[status_code])
+                self.assertEqual(str(err), error_map[status_code])
 
     @aioresponses()
     async def test_async_get_usern(self, mock):

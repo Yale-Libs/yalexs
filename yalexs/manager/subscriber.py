@@ -67,7 +67,7 @@ class SubscriberMixin(ABC):
             self._async_scheduled_refresh,
         )
 
-    def async_stop(self, *args: Any) -> None:
+    def async_stop(self, *args: Any) -> None:  # noqa: ARG002
         """Cleanup on shutdown."""
         self._refresh_task.cancel()
         self._async_cancel_update_interval()

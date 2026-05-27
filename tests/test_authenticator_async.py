@@ -52,8 +52,10 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         mock_aioresponses,
         v_password,
         v_install_id,
-        expires_at=format_datetime(datetime.now(timezone.utc)),
+        expires_at=None,
     ):
+        if expires_at is None:
+            expires_at = format_datetime(datetime.now(timezone.utc))
         mock_aioresponses.post(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
             headers={"x-august-access-token": "access_token"},
@@ -211,8 +213,6 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
             body="{}",
         )
         result = await authenticator.async_validate_verification_code("")
-
-        # mock_aioresponses.async_validate_verification_code.assert_not_called()
 
         self.assertEqual(ValidationResult.INVALID_VERIFICATION_CODE, result)
 

@@ -317,7 +317,7 @@ class YaleXSData(SubscriberMixin):
                 activity_stream.async_schedule_house_id_refresh(device.house_id)
                 break
 
-    async def async_stop(self, *args: Any) -> None:
+    async def async_stop(self, *args: Any) -> None:  # noqa: ARG002
         """Stop the subscriptions."""
         self._shutdown = True
         if self.activity_stream:

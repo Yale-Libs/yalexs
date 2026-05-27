@@ -9,8 +9,12 @@ import dateutil.parser
 
 @lru_cache(maxsize=512)
 def epoch_to_datetime(epoch: str | float) -> datetime.datetime:
-    """Convert epoch to datetime."""
-    return datetime.datetime.fromtimestamp(float(epoch) / 1000.0)
+    """Convert epoch to a naive local-time datetime.
+
+    Callers pass the result through ``as_utc_from_local`` to obtain UTC;
+    introducing tzinfo here would double-shift those conversions.
+    """
+    return datetime.datetime.fromtimestamp(float(epoch) / 1000.0)  # noqa: DTZ006
 
 
 def parse_datetime(datetime_string: str) -> datetime.datetime:

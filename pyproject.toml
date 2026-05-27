@@ -128,47 +128,38 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 
+[tool.ruff]
+target-version = "py310"
+
 [tool.ruff.lint]
 select = [
-    "A001", # Variable {name} is shadowing a Python builtin
-    "ASYNC210", # Async functions should not call blocking HTTP methods
-    "ASYNC220", # Async functions should not create subprocesses with blocking methods
-    "ASYNC221", # Async functions should not run processes with blocking methods
-    "ASYNC222", # Async functions should not wait on processes with blocking methods
-    "ASYNC230", # Async functions should not open files with blocking methods like open
-    "ASYNC251", # Async functions should not call time.sleep
-    "B002", # Python does not support the unary prefix increment
-    "B005", # Using .strip() with multi-character strings is misleading
-    "B007", # Loop control variable {name} not used within loop body
-    "B014", # Exception handler with duplicate exception
-    "B015", # Pointless comparison. Did you mean to assign a value? Otherwise, prepend assert or remove it.
-    "B017", # pytest.raises(BaseException) should be considered evil
-    "B018", # Found useless attribute access. Either assign it to a variable or remove it.
-    "B023", # Function definition does not bind loop variable {name}
-    "B026", # Star-arg unpacking after a keyword argument is strongly discouraged
-    "B032", # Possible unintentional type annotation (using :). Did you mean to assign (using =)?
-    "B904", # Use raise from to specify exception cause
-    "B905", # zip() without an explicit strict= parameter
-    "BLE",
-    "C", # complexity
+    "A", # flake8-builtins
+    "ANN", # flake8-annotations (D10x undocumented checks ignored below)
+    "ARG", # flake8-unused-arguments
+    "ASYNC", # async rules
+    "B", # flake8-bugbear
+    "BLE", # flake8-blind-except
+    "C", # complexity (mccabe + comprehensions)
     "COM818", # Trailing comma on bare tuple prohibited
-    "D", # docstrings
-    "DTZ003", # Use datetime.now(tz=) instead of datetime.utcnow()
-    "DTZ004", # Use datetime.fromtimestamp(ts, tz=) instead of datetime.utcfromtimestamp(ts)
+    "D", # pydocstyle
+    "DTZ", # flake8-datetimez
     "E", # pycodestyle
+    "EM", # flake8-errmsg
+    "ERA", # eradicate (commented-out code)
+    "EXE", # flake8-executable
     "F", # pyflakes/autoflake
-    "F541", # f-string without any placeholders
+    "FA", # flake8-future-annotations
+    "FIX", # flake8-fixme
     "FLY", # flynt
     "FURB", # refurb
     "G", # flake8-logging-format
     "I", # isort
+    "ICN", # flake8-import-conventions
     "INP", # flake8-no-pep420
     "ISC", # flake8-implicit-str-concat
-    "ICN001", # import concentions; {name} should be imported as {asname}
     "LOG", # flake8-logging
-    "N804", # First argument of a class method should be named cls
-    "N805", # First argument of a method should be named self
-    "N815", # Variable {name} in class scope should not be mixedCase
+    "N", # pep8-naming
+    "NPY", # numpy-specific rules
     "PERF", # Perflint
     "PGH", # pygrep-hooks
     "PIE", # flake8-pie
@@ -178,58 +169,20 @@ select = [
     "PYI", # flake8-pyi
     "RET", # flake8-return
     "RSE", # flake8-raise
-    "RUF005", # Consider iterable unpacking instead of concatenation
-    "RUF006", # Store a reference to the return value of asyncio.create_task
-    "RUF007", # Prefer itertools.pairwise() over zip() when iterating over successive pairs
-    "RUF008", # Do not use mutable default values for dataclass attributes
-    "RUF010", # Use explicit conversion flag
-    "RUF013", # PEP 484 prohibits implicit Optional
-    "RUF016", # Slice in indexed access to type {value_type} uses type {index_type} instead of an integer
-    "RUF017", # Avoid quadratic list summation
-    "RUF018", # Avoid assignment expressions in assert statements
-    "RUF019", # Unnecessary key check before dictionary access
-    "RUF020", # {never_like} | T is equivalent to T
-    "RUF021", # Parenthesize a and b expressions when chaining and and or together, to make the precedence clear
-    "RUF022", # Sort __all__
-    "RUF023", # Sort __slots__
-    "RUF024", # Do not pass mutable objects as values to dict.fromkeys
-    "RUF026", # default_factory is a positional-only argument to defaultdict
-    "RUF030", # print() call in assert statement is likely unintentional
-    "RUF032", # Decimal() called with float literal argument
-    "RUF033", # __post_init__ method with argument defaults
-    "RUF034", # Useless if-else condition
-    "RUF100", # Unused `noqa` directive
-    "RUF101", # noqa directives that use redirected rule codes
-    "RUF200", # Failed to parse pyproject.toml: {message}
-    "S102", # Use of exec detected
-    "S103", # bad-file-permissions
-    "S108", # hardcoded-temp-file
-    "S306", # suspicious-mktemp-usage
-    "S307", # suspicious-eval-usage
-    "S313", # suspicious-xmlc-element-tree-usage
-    "S314", # suspicious-xml-element-tree-usage
-    "S315", # suspicious-xml-expat-reader-usage
-    "S316", # suspicious-xml-expat-builder-usage
-    "S317", # suspicious-xml-sax-usage
-    "S318", # suspicious-xml-mini-dom-usage
-    "S319", # suspicious-xml-pull-dom-usage
-    "S601", # paramiko-call
-    "S602", # subprocess-popen-with-shell-equals-true
-    "S604", # call-with-shell-equals-true
-    "S608", # hardcoded-sql-expression
-    "S609", # unix-command-wildcard-injection
+    "RUF", # ruff
+    "S", # flake8-bandit
     "SIM", # flake8-simplify
     "SLF", # flake8-self
     "SLOT", # flake8-slots
-    "T100", # Trace found: {name} used
+    "T10", # flake8-debugger
     "T20", # flake8-print
     "TC", # flake8-type-checking
+    "TD", # flake8-todos
     "TID", # Tidy imports
     "TRY", # tryceratops
     "UP", # pyupgrade
-    "UP031", # Use format specifiers instead of percent format
-    "UP032", # Use f-string instead of `format` call
-    "W", # pycodestyle
+    "W", # pycodestyle warnings
+    "YTT", # flake8-2020
 ]
 
 
@@ -279,8 +232,35 @@ ignore = [
 
     "TRY003", # Avoid specifying long messages outside the exception class
     "TRY400", # Use `logging.exception` instead of `logging.error`
-    # Ignored due to performance: https://github.com/charliermarsh/ruff/issues/2923
-    "UP038", # Use `X | Y` in `isinstance` call instead of `(X, Y)`
+
+    # flake8-annotations: too many existing un-annotated signatures to fix now
+    "ANN001", # Missing type annotation for function argument
+    "ANN002", # Missing type annotation for *args
+    "ANN003", # Missing type annotation for **kwargs
+    "ANN201", # Missing return type annotation for public function
+    "ANN202", # Missing return type annotation for private function
+    "ANN204", # Missing return type annotation for special method
+    "ANN401", # Dynamically typed expressions (Any) are disallowed
+
+    # flake8-errmsg: would require restructuring every existing raise site
+    "EM101", # Exception must not use a string literal
+    "EM102", # Exception must not use an f-string literal
+
+    # pep8-naming: existing public API; renaming would break consumers
+    "N802", # Function name should be lowercase
+    "N818", # Exception name should end in `Error`
+
+    # async: timeout parameters are part of the public async API
+    "ASYNC109", # async-function-with-timeout
+
+    # bandit: header constants and # nosec-marked secrets trigger false positives
+    "S105", # Possible hardcoded password assigned
+    "S106", # Possible hardcoded password assigned to argument
+
+    # flake8-todos: existing TODO/FIXME comments don't follow strict formatting
+    "TD002", # Missing author in TODO
+    "TD003", # Missing issue link in TODO
+    "FIX002", # Line contains TODO
 
     # May conflict with the formatter, https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
     "W191",
@@ -311,3 +291,8 @@ ignore = [
     "PTH108", # Too many to fix
     "SLF001", # Too many to fix
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files use assert (S101), patch internals (SLF), accept unused fixture
+# args (ARG), and need not annotate every signature (ANN).
+"tests/**" = ["ANN", "ARG", "S101", "SLF"]

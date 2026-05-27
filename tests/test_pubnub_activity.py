@@ -319,7 +319,9 @@ class TestLockDetail(unittest.TestCase):
 
         activities = activities_from_pubnub_message(
             lock,
-            datetime.datetime.fromtimestamp(16844292526891571 / 10_000_000),
+            datetime.datetime.fromtimestamp(
+                16844292526891571 / 10_000_000, tz=datetime.timezone.utc
+            ),
             {
                 "status": "unlatched",
                 "callingUserID": "manualunlatch",
@@ -336,7 +338,9 @@ class TestLockDetail(unittest.TestCase):
 
         activities = activities_from_pubnub_message(
             lock,
-            datetime.datetime.fromtimestamp(16844292526891571 / 10_000_000),
+            datetime.datetime.fromtimestamp(
+                16844292526891571 / 10_000_000, tz=datetime.timezone.utc
+            ),
             {
                 "status": "unlocked",
                 "callingUserID": "manualunlock",
@@ -353,7 +357,9 @@ class TestLockDetail(unittest.TestCase):
 
         activities = activities_from_pubnub_message(
             lock,
-            datetime.datetime.fromtimestamp(16844299539729015 / 10_000_000),
+            datetime.datetime.fromtimestamp(
+                16844299539729015 / 10_000_000, tz=datetime.timezone.utc
+            ),
             {
                 "status": "locked",
                 "callingUserID": "manuallock",
