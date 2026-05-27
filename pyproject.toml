@@ -47,7 +47,7 @@ aioresponses = "^0.7.6"
 requests-mock = "^1.12.1"
 pytest-asyncio = ">=0.24.0"
 freezegun = "^1.5.1"
-pytest-freezegun = "^0.4.2"
+pytest-freezer = "^0.4.9"
 setuptools = ">=74.1.2,<81.0.0"
 
 [tool.poetry.group.docs]
