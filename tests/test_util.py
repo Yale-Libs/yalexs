@@ -213,14 +213,14 @@ class TestLockDetail(unittest.TestCase):
         )
         self.assertEqual(LockStatus.UNLOCKED, lock.lock_status)
         self.assertEqual(
-            as_utc_from_local(datetime.datetime.fromtimestamp(1582007217000 / 1000)),
+            as_utc_from_local(datetime.datetime.fromtimestamp(1582007217000 / 1000)),  # noqa: DTZ006
             lock.lock_status_datetime,
         )
 
         self.assertTrue(update_lock_detail_from_activity(lock, lock_operation_activity))
         self.assertEqual(LockStatus.LOCKED, lock.lock_status)
         self.assertEqual(
-            as_utc_from_local(datetime.datetime.fromtimestamp(1582007218000 / 1000)),
+            as_utc_from_local(datetime.datetime.fromtimestamp(1582007218000 / 1000)),  # noqa: DTZ006
             lock.lock_status_datetime,
         )
 
@@ -234,14 +234,14 @@ class TestLockDetail(unittest.TestCase):
         )
         self.assertEqual(LockDoorStatus.CLOSED, lock.door_state)
         self.assertEqual(
-            as_utc_from_local(datetime.datetime.fromtimestamp(1582007217000 / 1000)),
+            as_utc_from_local(datetime.datetime.fromtimestamp(1582007217000 / 1000)),  # noqa: DTZ006
             lock.door_state_datetime,
         )
 
         self.assertTrue(update_lock_detail_from_activity(lock, open_operation_activity))
         self.assertEqual(LockDoorStatus.OPEN, lock.door_state)
         self.assertEqual(
-            as_utc_from_local(datetime.datetime.fromtimestamp(1582007219000 / 1000)),
+            as_utc_from_local(datetime.datetime.fromtimestamp(1582007219000 / 1000)),  # noqa: DTZ006
             lock.door_state_datetime,
         )
 

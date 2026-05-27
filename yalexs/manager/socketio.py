@@ -86,7 +86,9 @@ class SocketIORunner:
         await sio.wait()
 
     async def run(
-        self, user_uuid: str, brand: Brand = Brand.YALE_GLOBAL
+        self,
+        user_uuid: str,  # noqa: ARG002
+        brand: Brand = Brand.YALE_GLOBAL,  # noqa: ARG002
     ) -> Callable[[], Coroutine[Any, Any, None]]:
         """Create a socketio session."""
         self._access_token = await self.gateway.async_get_access_token()

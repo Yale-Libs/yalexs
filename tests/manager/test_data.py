@@ -1,7 +1,7 @@
 """Test the manager data module."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -351,7 +351,7 @@ class TestPushStateTracking:
 
             # Call the push message handler
             data._async_handle_push_message(
-                device_id, datetime.now(), message, SOURCE_PUBNUB
+                device_id, datetime.now(timezone.utc), message, SOURCE_PUBNUB
             )
 
             # Verify activities were processed even though state unchanged
@@ -405,7 +405,7 @@ class TestPushMessageForUnknownDevice:
             caplog.at_level(logging.DEBUG),
         ):
             data._async_handle_push_message(
-                "MISSING_LOCK_ID", datetime.now(), message, SOURCE_PUBNUB
+                "MISSING_LOCK_ID", datetime.now(timezone.utc), message, SOURCE_PUBNUB
             )
 
         # We should not have tried to build activities for an unknown device.
@@ -436,7 +436,7 @@ class TestPushMessageForUnknownDevice:
             caplog.at_level(logging.DEBUG),
         ):
             data.async_push_message(
-                "MISSING_LOCK_ID", datetime.now(), message, SOURCE_PUBNUB
+                "MISSING_LOCK_ID", datetime.now(timezone.utc), message, SOURCE_PUBNUB
             )
 
         error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
@@ -461,7 +461,7 @@ class TestPushMessageForUnknownDevice:
         ):
             data._async_handle_push_message(
                 device_id,
-                datetime.now(),
+                datetime.now(timezone.utc),
                 {"status": "locked", "doorState": "closed"},
                 SOURCE_PUBNUB,
             )
