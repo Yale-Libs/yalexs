@@ -1,7 +1,7 @@
 import json
+import unittest
 from datetime import datetime, timedelta, timezone
 
-import aiounittest
 from aiohttp import ClientError, ClientSession
 from aioresponses import aioresponses
 from dateutil.tz import tzutc
@@ -26,7 +26,7 @@ def format_datetime(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + "Z"
 
 
-class TestAuthenticatorAsync(aiounittest.AsyncTestCase):
+class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         """Setup things to be run when tests are started."""
 

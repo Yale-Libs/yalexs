@@ -2,7 +2,6 @@ import json
 import os
 import unittest
 
-import aiounittest
 from aiohttp import ClientSession
 from aioresponses import aioresponses
 
@@ -467,7 +466,7 @@ class TestActivity(unittest.TestCase):
         assert doorbell_ding_activity.activity_end_time.timestamp() == 1691249378.0
 
 
-class TestActivityApiAsync(aiounittest.AsyncTestCase):
+class TestActivityApiAsync(unittest.IsolatedAsyncioTestCase):
     @aioresponses()
     async def test_async_get_lock_detail_bridge_online(self, mock):
         mock.get(

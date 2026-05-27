@@ -1,9 +1,9 @@
 import os
+import unittest
 from datetime import datetime
 from unittest import mock
 from unittest.mock import patch
 
-import aiounittest
 import dateutil.parser
 import pytest
 from aiohttp import ClientOSError, ClientResponse, ClientSession
@@ -62,7 +62,7 @@ def mock_aioresponse():
         yield m
 
 
-class TestApiAsync(aiounittest.AsyncTestCase):
+class TestApiAsync(unittest.IsolatedAsyncioTestCase):
     @aioresponses()
     async def test_async_get_doorbells(self, mock):
         mock.get(
