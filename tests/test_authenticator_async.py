@@ -1,7 +1,7 @@
 import json
+import unittest
 from datetime import datetime, timedelta, timezone
 
-import aiounittest
 from aiohttp import ClientError, ClientSession
 from aioresponses import aioresponses
 from dateutil.tz import tzutc
@@ -26,13 +26,23 @@ def format_datetime(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + "Z"
 
 
-class TestAuthenticatorAsync(aiounittest.AsyncTestCase):
+class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         """Setup things to be run when tests are started."""
 
+    def _new_session(self) -> ClientSession:
+        """Create a ClientSession that is closed during test cleanup."""
+        session = ClientSession()
+        self.addAsyncCleanup(session.close)
+        return session
+
     async def _async_create_authenticator_async(self, mock_aioresponses):
         authenticator = AuthenticatorAsync(
-            ApiAsync(ClientSession()), "phone", "user", "pass", install_id="install_id"
+            ApiAsync(self._new_session()),
+            "phone",
+            "user",
+            "pass",
+            install_id="install_id",
         )
         await authenticator.async_setup_authentication()
         return authenticator
