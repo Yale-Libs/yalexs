@@ -52,7 +52,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         mock_aioresponses,
         v_password,
         v_install_id,
-        expires_at=format_datetime(datetime.utcnow()),  # noqa: DTZ003
+        expires_at=format_datetime(datetime.now(timezone.utc)),
     ):
         mock_aioresponses.post(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
