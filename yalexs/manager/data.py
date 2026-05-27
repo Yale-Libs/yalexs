@@ -260,6 +260,20 @@ class YaleXSData(SubscriberMixin):
     ) -> None:
         """Handle a push message."""
         _LOGGER.debug("async_push_message from %s: %s %s", source, device_id, message)
+        if device_id not in self._device_detail_by_id:
+            # A push message can arrive for a device we have not loaded
+            # details for yet (e.g. setup is still running) or for a device
+            # that has been removed from the account. Dropping the message
+            # is safe: when the device becomes known, future refreshes will
+            # pick up its state. Raising would put the integration into a
+            # repeating error loop on every subsequent push for the same id.
+            _LOGGER.debug(
+                "Skipping push message from %s for unknown device %s: %s",
+                source,
+                device_id,
+                message,
+            )
+            return
         device = self.get_device_detail(device_id)
         activities = activities_from_pubnub_message(device, date_time, message, source)
 

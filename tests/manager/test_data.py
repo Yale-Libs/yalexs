@@ -369,6 +369,107 @@ class TestPushStateTracking:
             assert not data.activity_stream.async_schedule_house_id_refresh.called
 
 
+class TestPushMessageForUnknownDevice:
+    """Push messages for devices not in _device_detail_by_id are dropped, not raised."""
+
+    def _build_data(self) -> Any:
+        class TestData:
+            def __init__(self):
+                self._last_push_state = {}
+                self._device_detail_by_id = {}
+                self.activity_stream = Mock()
+                self.activity_stream.async_process_newer_device_activities = Mock(
+                    return_value=True
+                )
+                self.activity_stream.async_schedule_house_id_refresh = Mock()
+                self.signaled: list[str] = []
+
+            _is_unchanged_push_state = YaleXSData._is_unchanged_push_state
+            _async_handle_push_message = YaleXSData._async_handle_push_message
+            async_push_message = YaleXSData.async_push_message
+            get_device_detail = YaleXSData.get_device_detail
+
+            def async_signal_device_id_update(self, device_id):
+                self.signaled.append(device_id)
+
+        return TestData()
+
+    def test_unknown_device_id_logs_debug_and_returns(self, caplog):
+        data = self._build_data()
+        message = {"status": "locked", "doorState": "closed"}
+
+        with (
+            patch(
+                "yalexs.manager.data.activities_from_pubnub_message"
+            ) as mock_activities_func,
+            caplog.at_level(logging.DEBUG),
+        ):
+            data._async_handle_push_message(
+                "MISSING_LOCK_ID", datetime.now(), message, SOURCE_PUBNUB
+            )
+
+        # We should not have tried to build activities for an unknown device.
+        assert not mock_activities_func.called
+        # We should not have signaled any update for a device we do not know.
+        assert data.signaled == []
+        # And we should have logged the skip at debug level.
+        assert any(
+            "unknown device" in record.message and "MISSING_LOCK_ID" in record.message
+            for record in caplog.records
+        )
+
+    def test_unknown_device_id_via_async_push_message_does_not_raise(self, caplog):
+        """Regression for GH#325: async_push_message must swallow unknown ids quietly.
+
+        Before the fix this path raised KeyError out of _async_handle_push_message,
+        was caught by the outer except Exception, and logged a full stack trace on
+        every push for the unknown device — flooding logs and (per the bug report)
+        coinciding with BLE reconnect failures until the integration was reloaded.
+        After the fix the inner handler short-circuits at DEBUG level and no
+        ERROR-level traceback is produced.
+        """
+        data = self._build_data()
+        message = {"status": "locked", "doorState": "closed"}
+
+        with (
+            patch("yalexs.manager.data.activities_from_pubnub_message"),
+            caplog.at_level(logging.DEBUG),
+        ):
+            data.async_push_message(
+                "MISSING_LOCK_ID", datetime.now(), message, SOURCE_PUBNUB
+            )
+
+        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert error_records == []
+
+    def test_known_device_id_still_processed(self):
+        """Sanity check: the new guard must not break the happy path."""
+        data = self._build_data()
+        device_id = "KNOWN_LOCK_ID"
+        mock_device = Mock()
+        mock_device.device_id = device_id
+        mock_device.house_id = "house"
+        data._device_detail_by_id[device_id] = mock_device
+
+        mock_activity = Mock()
+        mock_activity.is_status = False
+        mock_activity.action = "lock"
+
+        with patch(
+            "yalexs.manager.data.activities_from_pubnub_message",
+            return_value=[mock_activity],
+        ):
+            data._async_handle_push_message(
+                device_id,
+                datetime.now(),
+                {"status": "locked", "doorState": "closed"},
+                SOURCE_PUBNUB,
+            )
+
+        assert data.activity_stream.async_process_newer_device_activities.called
+        assert data.signaled == [device_id]
+
+
 @pytest.mark.asyncio
 async def test_fetch_lock_capabilities() -> None:
     """Test that lock capabilities are fetched and set correctly."""
