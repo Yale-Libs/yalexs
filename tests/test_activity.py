@@ -467,6 +467,12 @@ class TestActivity(unittest.TestCase):
 
 
 class TestActivityApiAsync(unittest.IsolatedAsyncioTestCase):
+    def _new_session(self) -> ClientSession:
+        """Create a ClientSession that is closed during test cleanup."""
+        session = ClientSession()
+        self.addAsyncCleanup(session.close)
+        return session
+
     @aioresponses()
     async def test_async_get_lock_detail_bridge_online(self, mock):
         mock.get(
@@ -476,7 +482,7 @@ class TestActivityApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_lock.online.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_get_lock_detail(
             ACCESS_TOKEN, "A6697750D607098BAE8D6BAA11EF8063"
         )

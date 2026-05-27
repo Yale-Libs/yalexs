@@ -63,6 +63,12 @@ def mock_aioresponse():
 
 
 class TestApiAsync(unittest.IsolatedAsyncioTestCase):
+    def _new_session(self) -> ClientSession:
+        """Create a ClientSession that is closed during test cleanup."""
+        session = ClientSession()
+        self.addAsyncCleanup(session.close)
+        return session
+
     @aioresponses()
     async def test_async_get_doorbells(self, mock):
         mock.get(
@@ -70,7 +76,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_doorbells.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         doorbells = sorted(
             await api.async_get_doorbells(ACCESS_TOKEN), key=lambda d: d.device_id
         )
@@ -106,7 +112,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         )
         mock.get(expected_doorbell_image_url, body="doorbell_image_mocked")
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         doorbell = await api.async_get_doorbell_detail(ACCESS_TOKEN, "K98GiDT45GUL")
 
         self.assertEqual("K98GiDT45GUL", doorbell.device_id)
@@ -126,7 +132,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(True, doorbell.has_subscription)
         self.assertEqual(expected_doorbell_image_url, doorbell.image_url)
         self.assertEqual(
-            await doorbell.async_get_doorbell_image(ClientSession()),
+            await doorbell.async_get_doorbell_image(self._new_session()),
             b"doorbell_image_mocked",
         )
 
@@ -142,11 +148,11 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         )
         mock.get(expected_doorbell_image_url, status=401)
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         doorbell = await api.async_get_doorbell_detail(ACCESS_TOKEN, "K98GiDT45GUL")
 
         with self.assertRaises(ContentTokenExpired):
-            await doorbell.async_get_doorbell_image(ClientSession())
+            await doorbell.async_get_doorbell_image(self._new_session())
 
     @aioresponses()
     async def test_async_get_doorbell_detail_missing_image(self, mock):
@@ -157,7 +163,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_doorbell_missing_image.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         doorbell = await api.async_get_doorbell_detail(ACCESS_TOKEN, "K98GiDT45GUL")
 
         self.assertEqual("K98GiDT45GUL", doorbell.device_id)
@@ -182,7 +188,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_doorbell.offline.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         doorbell = await api.async_get_doorbell_detail(ACCESS_TOKEN, "231ee2168dd0")
 
         self.assertEqual("231ee2168dd0", doorbell.device_id)
@@ -211,7 +217,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_doorbell.battery_full.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         doorbell = await api.async_get_doorbell_detail(ACCESS_TOKEN, "did")
 
         self.assertEqual(100, doorbell.battery_level)
@@ -225,7 +231,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_doorbell.battery_medium.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         doorbell = await api.async_get_doorbell_detail(ACCESS_TOKEN, "did")
 
         self.assertEqual(75, doorbell.battery_level)
@@ -239,7 +245,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_doorbell.battery_low.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         doorbell = await api.async_get_doorbell_detail(ACCESS_TOKEN, "did")
 
         self.assertEqual(10, doorbell.battery_level)
@@ -251,7 +257,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_locks.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         locks = sorted(
             await api.async_get_locks(ACCESS_TOKEN), key=lambda d: d.device_id
         )
@@ -277,7 +283,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_locks.json"),
         )
 
-        api = ApiAsync(ClientSession(), brand=Brand.YALE_HOME)
+        api = ApiAsync(self._new_session(), brand=Brand.YALE_HOME)
         locks = sorted(
             await api.async_get_locks(ACCESS_TOKEN), key=lambda d: d.device_id
         )
@@ -303,7 +309,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_locks.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         locks = await api.async_get_operable_locks(ACCESS_TOKEN)
 
         self.assertEqual(1, len(locks))
@@ -323,7 +329,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_lock.online_with_doorsense.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         lock = await api.async_get_lock_detail(ACCESS_TOKEN, "ABC")
 
         self.assertEqual("ABC", lock.device_id)
@@ -361,7 +367,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_lock.online_with_doorsense_disabled.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         lock = await api.async_get_lock_detail(ACCESS_TOKEN, "ABC")
 
         self.assertEqual("ABC", lock.device_id)
@@ -398,7 +404,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_lock.online.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         lock = await api.async_get_lock_detail(
             ACCESS_TOKEN, "A6697750D607098BAE8D6BAA11EF8063"
         )
@@ -439,7 +445,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("lock_with_doorbell.online.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         lock = await api.async_get_lock_detail(
             ACCESS_TOKEN, "A6697750D607098BAE8D6BAA11EF8063"
         )
@@ -456,7 +462,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("lock_with_unlatch.online.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         lock = await api.async_get_lock_detail(
             ACCESS_TOKEN, "68895DD075A1444FAD4C00B273EEEF28"
         )
@@ -505,7 +511,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             payload=capabilities_response,
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         capabilities = await api.async_get_lock_capabilities(
             ACCESS_TOKEN, serial_number
         )
@@ -522,7 +528,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_lock_v2.online.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         lock = await api.async_get_lock_detail(ACCESS_TOKEN, "snip")
 
         self.assertEqual("snip", lock.device_id)
@@ -582,7 +588,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_lock.offline.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         lock = await api.async_get_lock_detail(ACCESS_TOKEN, "ABC")
 
         self.assertEqual("ABC", lock.device_id)
@@ -611,7 +617,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_lock.doorsense_init.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         lock = await api.async_get_lock_detail(
             ACCESS_TOKEN, "A6697750D607098BAE8D6BAA11EF8063"
         )
@@ -669,7 +675,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"status": "kAugLockState_Locked"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status = await api.async_get_lock_status(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockStatus.LOCKED, status)
@@ -685,7 +691,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             ',"doorState": "kAugLockDoorState_Closed"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status, door_status = await api.async_get_lock_status(
             ACCESS_TOKEN, lock_id, True
         )
@@ -703,7 +709,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"status": "kAugLockState_Unlocked"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status = await api.async_get_lock_status(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockStatus.UNLOCKED, status)
@@ -718,7 +724,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"status": "not_advertising"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status = await api.async_get_lock_status(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockStatus.UNKNOWN, status)
@@ -733,7 +739,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"doorState": "kAugLockDoorState_Closed"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         door_status = await api.async_get_lock_door_status(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockDoorStatus.CLOSED, door_status)
@@ -748,7 +754,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"doorState": "kAugLockDoorState_Open"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         door_status = await api.async_get_lock_door_status(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockDoorStatus.OPEN, door_status)
@@ -764,7 +770,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             ',"doorState": "kAugLockDoorState_Open"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         door_status, status = await api.async_get_lock_door_status(
             ACCESS_TOKEN, lock_id, True
         )
@@ -782,7 +788,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"doorState": "not_advertising"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         door_status = await api.async_get_lock_door_status(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockDoorStatus.UNKNOWN, door_status)
@@ -797,7 +803,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("lock.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status = await api.async_lock(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockStatus.LOCKED, status)
@@ -812,7 +818,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("unlock.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status = await api.async_unlock(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockStatus.UNLOCKED, status)
@@ -827,7 +833,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("lock.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         activities = await api.async_lock_return_activities(ACCESS_TOKEN, lock_id)
         expected_lock_dt = (
             dateutil.parser.parse("2020-02-19T19:44:54.371Z")
@@ -859,7 +865,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("unlatch.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         activities = await api.async_unlatch_return_activities(ACCESS_TOKEN, lock_id)
         expected_unlatch_dt = (
             dateutil.parser.parse("2024-03-20T06:39:42.192Z")
@@ -891,7 +897,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("unlock.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         activities = await api.async_unlock_return_activities(ACCESS_TOKEN, lock_id)
         expected_unlock_dt = (
             dateutil.parser.parse("2020-02-19T19:44:26.745Z")
@@ -925,7 +931,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("lock_without_doorstate.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         activities = await api.async_lock_return_activities(ACCESS_TOKEN, lock_id)
         expected_lock_dt = (
             dateutil.parser.parse("2020-02-19T19:44:54.371Z")
@@ -953,7 +959,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("unlatch_without_doorstate.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         activities = await api.async_unlatch_return_activities(ACCESS_TOKEN, lock_id)
         expected_unlatch_dt = (
             dateutil.parser.parse("2024-03-20T06:39:42.192Z")
@@ -981,7 +987,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("unlock_without_doorstate.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         activities = await api.async_unlock_return_activities(ACCESS_TOKEN, lock_id)
         expected_unlock_dt = (
             dateutil.parser.parse("2020-02-19T19:44:26.745Z")
@@ -1010,7 +1016,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             '"valid":true}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status = await api.async_lock(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockStatus.LOCKED, status)
@@ -1024,7 +1030,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             .format(lock_id=lock_id),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_lock_async(ACCESS_TOKEN, lock_id, hyper_bridge=False)
 
     @aioresponses()
@@ -1033,7 +1039,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         base_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_LOCK_ASYNC_URL)
         mock.put(f"{base_url}{HYPER_BRIDGE_PARAM}".format(lock_id=lock_id))
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_lock_async(ACCESS_TOKEN, lock_id)
 
     @aioresponses()
@@ -1046,7 +1052,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"status": "unlatched"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status = await api.async_unlatch(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockStatus.UNLATCHED, status)
@@ -1061,7 +1067,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             .format(lock_id=lock_id)
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_unlatch_async(ACCESS_TOKEN, lock_id, hyper_bridge=False)
 
     @aioresponses()
@@ -1070,7 +1076,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         base_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_UNLATCH_ASYNC_URL)
         mock.put(f"{base_url}{HYPER_BRIDGE_PARAM}".format(lock_id=lock_id))
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_unlatch_async(ACCESS_TOKEN, lock_id, hyper_bridge=True)
 
     @aioresponses()
@@ -1083,7 +1089,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"status": "unlocked"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         status = await api.async_unlock(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(LockStatus.UNLOCKED, status)
@@ -1098,7 +1104,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             .format(lock_id=lock_id)
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_unlock_async(ACCESS_TOKEN, lock_id, hyper_bridge=False)
 
     @aioresponses()
@@ -1107,7 +1113,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         base_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_UNLOCK_ASYNC_URL)
         mock.put(f"{base_url}{HYPER_BRIDGE_PARAM}".format(lock_id=lock_id))
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_unlock_async(ACCESS_TOKEN, lock_id, hyper_bridge=True)
 
     @aioresponses()
@@ -1120,7 +1126,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             .format(lock_id=lock_id)
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_status_async(ACCESS_TOKEN, lock_id, hyper_bridge=False)
 
     @aioresponses()
@@ -1129,7 +1135,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         base_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_STATUS_ASYNC_URL)
         mock.put(f"{base_url}{HYPER_BRIDGE_PARAM}".format(lock_id=lock_id))
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_status_async(ACCESS_TOKEN, lock_id)
 
     @aioresponses()
@@ -1142,7 +1148,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_pins.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         pins = await api.async_get_pins(ACCESS_TOKEN, lock_id)
 
         self.assertEqual(1, len(pins))
@@ -1177,7 +1183,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body=load_fixture("get_house_activities.json"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         activities = await api.async_get_house_activities(ACCESS_TOKEN, house_id)
 
         self.assertEqual(10, len(activities))
@@ -1205,7 +1211,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             exception=ClientOSError("any"),
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         with (
             patch.object(api_async, "API_EXCEPTION_RETRY_TIME", 0),
             pytest.raises(AugustApiAIOHTTPError),
@@ -1220,7 +1226,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             headers={"x-august-access-token": "xyz"},
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         new_token = await api.async_refresh_access_token("token")
         assert new_token == "xyz"
 
@@ -1239,7 +1245,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             callback=response_callback,
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         await api.async_validate_verification_code(
             ACCESS_TOKEN, "email", "emailaddress", 123456
         )
@@ -1249,7 +1255,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         loop = mock.Mock()
         request_info = mock.Mock()
         request_info.status.return_value = 428
-        session = ClientSession()
+        session = self._new_session()
         four_two_eight = MockedResponse(
             "get",
             URL("http://code404.tld"),
@@ -1301,7 +1307,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             body='{"UserID": "abc"}',
         )
 
-        api = ApiAsync(ClientSession())
+        api = ApiAsync(self._new_session())
         user_details = await api.async_get_user("token")
         assert user_details == {"UserID": "abc"}
 
@@ -1352,14 +1358,15 @@ async def test_retry_502_429(status_code: int, mock_aioresponse: aioresponses) -
             callback=response_callback,
         )
 
-    api = ApiAsync(ClientSession())
-    with (
-        patch("yalexs.api_async.API_EXCEPTION_RETRY_TIME", 0),
-        patch("yalexs.api_async.API_RETRY_ATTEMPTS", 2),
-        patch("yalexs.api_async.asyncio.sleep"),
-    ):
-        await api.async_validate_verification_code(
-            ACCESS_TOKEN, "email", "emailaddress", 123456
-        )
-    assert last_args["json"] == {"code": "123456", "email": "emailaddress"}
-    assert attempt == 2
+    async with ClientSession() as session:
+        api = ApiAsync(session)
+        with (
+            patch("yalexs.api_async.API_EXCEPTION_RETRY_TIME", 0),
+            patch("yalexs.api_async.API_RETRY_ATTEMPTS", 2),
+            patch("yalexs.api_async.asyncio.sleep"),
+        ):
+            await api.async_validate_verification_code(
+                ACCESS_TOKEN, "email", "emailaddress", 123456
+            )
+        assert last_args["json"] == {"code": "123456", "email": "emailaddress"}
+        assert attempt == 2
