@@ -451,10 +451,12 @@ class ApiAsync(ApiCommon):
         )
         return await response.json()
 
-    async def async_get_websocket_subscriptions(self, access_token: str) -> str:
-        """Get websocket subscriptions."""
+    async def async_get_websocket_subscriptions(
+        self, access_token: str, subscriber_id: str
+    ) -> str:
+        """Get websocket subscriptions for a specific subscriber."""
         response = await self._async_dict_to_api(
-            self._build_websocket_get_request(access_token)
+            self._build_websocket_get_request(access_token, subscriber_id)
         )
         return await response.text()
 
