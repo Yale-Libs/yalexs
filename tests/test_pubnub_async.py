@@ -185,7 +185,7 @@ def test_channels_property_reflects_registration():
     assert set(pn.channels) == {"ch-a", "ch-b"}
 
 
-def test_status_unhandled_category_is_noop():
+def test_status_unhandled_category_is_noop() -> None:
     """Categories outside the handled set must not flip state or reconnect."""
     pn = AugustPubNub()
     pn.connected = True  # sentinel: should stay True
@@ -209,15 +209,15 @@ def _build_fake_pubnub() -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_run_configures_pubnub_and_subscribes_channels():
+async def test_run_configures_pubnub_and_subscribes_channels() -> None:
     pn = AugustPubNub()
     pn.register_device(_make_device("ch-1", "DEV1"))
     pn.register_device(_make_device("ch-2", "DEV2"))
 
     fake_pubnub = _build_fake_pubnub()
-    captured_config = {}
+    captured_config: dict[str, object] = {}
 
-    def fake_pubnub_factory(pnconfig):
+    def fake_pubnub_factory(pnconfig: object) -> MagicMock:
         captured_config["pnconfig"] = pnconfig
         return fake_pubnub
 
@@ -243,7 +243,7 @@ async def test_run_configures_pubnub_and_subscribes_channels():
 
 
 @pytest.mark.asyncio
-async def test_run_returned_unsub_tears_down_pubnub():
+async def test_run_returned_unsub_tears_down_pubnub() -> None:
     pn = AugustPubNub()
     pn.register_device(_make_device("ch-1", "DEV1"))
 
@@ -264,12 +264,12 @@ async def test_run_returned_unsub_tears_down_pubnub():
 
 
 @pytest.mark.asyncio
-async def test_run_defaults_to_august_brand():
+async def test_run_defaults_to_august_brand() -> None:
     pn = AugustPubNub()
     fake_pubnub = _build_fake_pubnub()
-    captured = {}
+    captured: dict[str, object] = {}
 
-    def factory(pnconfig):
+    def factory(pnconfig: object) -> MagicMock:
         captured["pnconfig"] = pnconfig
         return fake_pubnub
 
