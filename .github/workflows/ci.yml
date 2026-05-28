@@ -94,7 +94,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Create local branch name
         env:
