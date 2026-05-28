@@ -452,9 +452,11 @@ class ApiAsync(ApiCommon):
         return await response.json()
 
     async def async_get_websocket_subscriptions(
-        self, access_token: str, subscriber_id: str
+        self, access_token: str, subscriber_id: str | None = None
     ) -> str:
         """Get websocket subscriptions for a specific subscriber."""
+        if subscriber_id is None:
+            raise ValueError("subscriber_id is required")
         response = await self._async_dict_to_api(
             self._build_websocket_get_request(access_token, subscriber_id)
         )
