@@ -1310,13 +1310,19 @@ async def test_async_setup_filters_inoperative_and_starts_initial_sync():
     async def fake_refresh(device_ids):
         # only lockA gets details — lockB and doorbell drop off
         data._device_detail_by_id = {
-            "lockA": Mock(spec=LockDetail, bridge=Mock(hyper_bridge=False), keypad=None),
+            "lockA": Mock(
+                spec=LockDetail, bridge=Mock(hyper_bridge=False), keypad=None
+            ),
         }
 
     with (
-        patch.object(data, "_async_refresh_device_detail_by_ids", side_effect=fake_refresh),
+        patch.object(
+            data, "_async_refresh_device_detail_by_ids", side_effect=fake_refresh
+        ),
         patch.object(data, "async_setup_activity_stream", new=AsyncMock()),
-        patch("yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()),
+        patch(
+            "yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()
+        ),
         patch("yalexs.manager.data._RateLimitChecker.register_wakeup", new=AsyncMock()),
         patch.object(
             data, "_async_status_async", new=AsyncMock(return_value="ok")
@@ -1350,10 +1356,16 @@ async def test_async_setup_yale_global_fetches_capabilities_and_skips_sync():
         data._device_detail_by_id = {"L1": lock_detail}
 
     with (
-        patch.object(data, "_async_refresh_device_detail_by_ids", side_effect=fake_refresh),
+        patch.object(
+            data, "_async_refresh_device_detail_by_ids", side_effect=fake_refresh
+        ),
         patch.object(data, "async_setup_activity_stream", new=AsyncMock()),
-        patch.object(data, "_async_fetch_lock_capabilities", new=AsyncMock()) as fetch_caps,
-        patch("yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()),
+        patch.object(
+            data, "_async_fetch_lock_capabilities", new=AsyncMock()
+        ) as fetch_caps,
+        patch(
+            "yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()
+        ),
         patch("yalexs.manager.data._RateLimitChecker.register_wakeup", new=AsyncMock()),
     ):
         await data.async_setup()
@@ -1378,7 +1390,9 @@ async def test_async_setup_activity_stream_yale_global_uses_socketio():
     fake_stream.async_setup = AsyncMock()
 
     with (
-        patch("yalexs.manager.data.SocketIORunner", return_value=fake_runner) as sio_cls,
+        patch(
+            "yalexs.manager.data.SocketIORunner", return_value=fake_runner
+        ) as sio_cls,
         patch("yalexs.manager.data.ActivityStream", return_value=fake_stream),
     ):
         await data.async_setup_activity_stream()
@@ -1573,9 +1587,7 @@ async def test_refresh_device_detail_by_id_short_circuits_on_shutdown():
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     data._shutdown = True
-    with patch.object(
-        data, "_async_update_device_detail", new=AsyncMock()
-    ) as inner:
+    with patch.object(data, "_async_update_device_detail", new=AsyncMock()) as inner:
         await data._async_refresh_device_detail_by_id("dev")
     inner.assert_not_called()
 
@@ -1615,9 +1627,7 @@ async def test_refresh_device_detail_by_id_lock_path_restores_live_attrs():
     signals: list[str] = []
     with (
         patch.object(data, "_async_update_device_detail", side_effect=_update),
-        patch.object(
-            data, "async_signal_device_id_update", side_effect=signals.append
-        ),
+        patch.object(data, "async_signal_device_id_update", side_effect=signals.append),
     ):
         await data._async_refresh_device_detail_by_id(lock_id)
 
@@ -1770,8 +1780,12 @@ async def test_status_async_wraps_underlying_call_with_rate_limit():
     gateway.api.async_status_async = AsyncMock(return_value="rid")
 
     with (
-        patch("yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()) as chk,
-        patch("yalexs.manager.data._RateLimitChecker.register_wakeup", new=AsyncMock()) as reg,
+        patch(
+            "yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()
+        ) as chk,
+        patch(
+            "yalexs.manager.data._RateLimitChecker.register_wakeup", new=AsyncMock()
+        ) as reg,
     ):
         result = await data.async_status_async("dev", True)
 
