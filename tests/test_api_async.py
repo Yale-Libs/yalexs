@@ -1638,9 +1638,7 @@ async def test_async_get_house_returns_dict(
     mock_aioresponse: aioresponses,
 ) -> None:
     mock_aioresponse.get(
-        ApiCommon(DEFAULT_BRAND).get_brand_url(
-            API_GET_HOUSE_URL.format(house_id="h1")
-        ),
+        ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSE_URL.format(house_id="h1")),
         payload={"HouseID": "h1", "name": "Home"},
     )
     async with ClientSession() as session:
