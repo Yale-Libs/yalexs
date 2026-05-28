@@ -70,7 +70,9 @@ def _alarm_device_data(**overrides: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_activity_from_dict_unknown_action_with_debug(caplog):
+def test_activity_from_dict_unknown_action_with_debug(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Unknown action should log 'Unknown activity' when debug=True."""
     caplog.set_level(logging.DEBUG)
     result = _activity_from_dict("source", {"action": "totally_made_up"}, debug=True)
@@ -78,7 +80,9 @@ def test_activity_from_dict_unknown_action_with_debug(caplog):
     assert any("Unknown activity" in r.message for r in caplog.records)
 
 
-def test_activity_from_dict_known_action_with_debug(caplog):
+def test_activity_from_dict_known_action_with_debug(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Known action should log 'Processing activity' and return an instance."""
     caplog.set_level(logging.DEBUG)
     # `lock` is a known action mapped to LockOperationActivity
@@ -94,7 +98,9 @@ def test_activity_from_dict_known_action_with_debug(caplog):
     assert any("Processing activity" in r.message for r in caplog.records)
 
 
-def test_activity_from_dict_unknown_action_no_debug(caplog):
+def test_activity_from_dict_unknown_action_no_debug(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """When debug=False the debug-branch logging must NOT fire."""
     caplog.set_level(logging.DEBUG)
     result = _activity_from_dict("source", {"action": "still_made_up"}, debug=False)
@@ -106,7 +112,7 @@ def test_activity_from_dict_unknown_action_no_debug(caplog):
     )
 
 
-def test_process_activity_json_events_key_unwrap():
+def test_process_activity_json_events_key_unwrap() -> None:
     """Payloads with an 'events' key should be unwrapped before processing."""
     payload = {
         "events": [
@@ -125,7 +131,7 @@ def test_process_activity_json_events_key_unwrap():
     assert len(activities) == 1
 
 
-def test_process_activity_json_plain_list():
+def test_process_activity_json_plain_list() -> None:
     """Payloads without 'events' should be iterated directly."""
     payload = [
         {
@@ -140,7 +146,7 @@ def test_process_activity_json_plain_list():
     assert len(activities) == 1
 
 
-def test_process_alarms_json():
+def test_process_alarms_json() -> None:
     raw = [_alarm_data(houseID="house-A"), _alarm_data(location="Cottage")]
     raw[0]["alarmID"] = "alarm-A"
     raw[1]["alarmID"] = "alarm-B"
@@ -151,7 +157,7 @@ def test_process_alarms_json():
     assert alarms[1].device_id == "alarm-B"
 
 
-def test_process_alarm_devices_json():
+def test_process_alarm_devices_json() -> None:
     raw = [_alarm_device_data(), _alarm_device_data(_id="dev-2", name="Back Sensor")]
     devices = _process_alarm_devices_json(raw)
     assert len(devices) == 2
