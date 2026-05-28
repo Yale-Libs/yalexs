@@ -1,7 +1,11 @@
+import asyncio
 import json
+import os
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 
+import aiofiles
 from aiohttp import ClientError, ClientSession
 from aioresponses import aioresponses
 from dateutil.tz import tzutc
@@ -19,7 +23,7 @@ from yalexs.authenticator_async import (
     AuthenticatorAsync,
     ValidationResult,
 )
-from yalexs.const import DEFAULT_BRAND, HEADER_AUGUST_ACCESS_TOKEN
+from yalexs.const import DEFAULT_BRAND, HEADER_AUGUST_ACCESS_TOKEN, Brand
 
 
 def format_datetime(dt):
@@ -253,3 +257,174 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         result = await authenticator.async_validate_verification_code("123456")
 
         self.assertEqual(ValidationResult.INVALID_VERIFICATION_CODE, result)
+
+
+class TestAuthenticatorAsyncCache(unittest.IsolatedAsyncioTestCase):
+    """Coverage for cache-file paths, oauth gating, and refresh short-circuits."""
+
+    def setUp(self):
+        fd, self._cache_path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        # Remove the file so tests start with a clean slate; individual tests
+        # that want a populated cache write into the path explicitly.
+        os.unlink(self._cache_path)
+
+    def tearDown(self):
+        if os.path.exists(self._cache_path):
+            os.unlink(self._cache_path)
+
+    def _new_session(self) -> ClientSession:
+        session = ClientSession()
+        self.addAsyncCleanup(session.close)
+        return session
+
+    def _make_authenticator(self, brand=DEFAULT_BRAND) -> AuthenticatorAsync:
+        return AuthenticatorAsync(
+            ApiAsync(self._new_session(), brand=brand),
+            "phone",
+            "user",
+            "pass",
+            install_id="install_id",
+            access_token_cache_file=self._cache_path,
+        )
+
+    async def _write_cache(self, expires_at: datetime) -> None:
+        payload = {
+            "install_id": "cached_install",
+            "access_token": "cached_token",
+            "access_token_expires": expires_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "state": AuthenticationState.AUTHENTICATED.value,
+        }
+        async with aiofiles.open(self._cache_path, "w") as f:
+            await f.write(json.dumps(payload))
+
+    async def test_setup_authentication_with_missing_cache_file(self):
+        authenticator = self._make_authenticator()
+        await authenticator.async_setup_authentication()
+        # Falls through to fresh REQUIRES_AUTHENTICATION state.
+        self.assertEqual(
+            AuthenticationState.REQUIRES_AUTHENTICATION,
+            authenticator._authentication.state,
+        )
+        self.assertEqual("install_id", authenticator._authentication.install_id)
+
+    async def test_setup_authentication_with_invalid_json(self):
+        async with aiofiles.open(self._cache_path, "w") as f:
+            await f.write("not-json{")
+        authenticator = self._make_authenticator()
+        await authenticator.async_setup_authentication()
+        self.assertEqual(
+            AuthenticationState.REQUIRES_AUTHENTICATION,
+            authenticator._authentication.state,
+        )
+
+    async def test_setup_authentication_loads_valid_cache(self):
+        # Far-future expiration → no warning, loaded as-is.
+        await self._write_cache(datetime.now(timezone.utc) + timedelta(days=30))
+        authenticator = self._make_authenticator()
+        await authenticator.async_setup_authentication()
+        self.assertEqual(
+            AuthenticationState.AUTHENTICATED, authenticator._authentication.state
+        )
+        self.assertEqual("cached_token", authenticator._authentication.access_token)
+        self.assertEqual("cached_install", authenticator._authentication.install_id)
+
+    async def test_setup_authentication_with_expired_cache(self):
+        await self._write_cache(datetime.now(timezone.utc) - timedelta(days=1))
+        authenticator = self._make_authenticator()
+        await authenticator.async_setup_authentication()
+        # Expired tokens reset state to REQUIRES_AUTHENTICATION.
+        self.assertEqual(
+            AuthenticationState.REQUIRES_AUTHENTICATION,
+            authenticator._authentication.state,
+        )
+        # install_id from the configured authenticator, not the cached one.
+        self.assertEqual("install_id", authenticator._authentication.install_id)
+
+    async def test_setup_authentication_with_soon_expiring_cache_warns(self):
+        # Within the 7-day renewal threshold → logs a warning but keeps the token.
+        await self._write_cache(datetime.now(timezone.utc) + timedelta(days=2))
+        authenticator = self._make_authenticator()
+        with self.assertLogs("yalexs.authenticator_async", level="WARNING") as logs:
+            await authenticator.async_setup_authentication()
+        self.assertTrue(
+            any("going to expire" in m for m in logs.output),
+            f"expected expiry warning, got: {logs.output}",
+        )
+        self.assertEqual(
+            AuthenticationState.AUTHENTICATED, authenticator._authentication.state
+        )
+
+    @aioresponses()
+    async def test_authenticate_writes_cache_file(self, mock_aioresponses):
+        # Round-trip: a successful authenticate() should persist to disk.
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(days=30)
+        ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + "Z"
+        mock_aioresponses.post(
+            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
+            headers={"x-august-access-token": "fresh_token"},
+            body=json.dumps(
+                {"expiresAt": expires_at, "vPassword": True, "vInstallId": True}
+            ),
+        )
+        authenticator = self._make_authenticator()
+        await authenticator.async_setup_authentication()
+        await authenticator.async_authenticate()
+
+        exists = await asyncio.to_thread(os.path.exists, self._cache_path)
+        self.assertTrue(exists)
+        async with aiofiles.open(self._cache_path) as f:
+            stored = json.loads(await f.read())
+        self.assertEqual("fresh_token", stored["access_token"])
+        self.assertEqual(AuthenticationState.AUTHENTICATED.value, stored["state"])
+
+    async def test_authenticate_raises_for_oauth_required_brand(self):
+        authenticator = AuthenticatorAsync(
+            ApiAsync(self._new_session(), brand=Brand.YALE_GLOBAL),
+            "phone",
+            "user",
+            "pass",
+            install_id="install_id",
+        )
+        await authenticator.async_setup_authentication()
+        with self.assertRaises(RuntimeError):
+            await authenticator.async_authenticate()
+
+    @aioresponses()
+    async def test_refresh_short_circuits_when_not_authenticated(
+        self, mock_aioresponses
+    ):
+        authenticator = self._make_authenticator()
+        await authenticator.async_setup_authentication()
+        # State is REQUIRES_AUTHENTICATION → refresh logs warning and returns
+        # current authentication without hitting the API.
+        with self.assertLogs("yalexs.authenticator_async", level="WARNING") as logs:
+            result = await authenticator.async_refresh_access_token(force=True)
+        self.assertTrue(
+            any("not authenticated" in m for m in logs.output),
+            f"expected not-authenticated warning, got: {logs.output}",
+        )
+        self.assertIs(result, authenticator._authentication)
+
+    @aioresponses()
+    async def test_refresh_no_op_when_refresh_not_needed(self, mock_aioresponses):
+        # Authenticate with a far-future expiration, then refresh(force=False)
+        # should short-circuit without calling the API.
+        far_future = (
+            datetime.now(timezone.utc) + timedelta(days=30)
+        ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + "Z"
+        mock_aioresponses.post(
+            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
+            headers={"x-august-access-token": "fresh_token"},
+            body=json.dumps(
+                {"expiresAt": far_future, "vPassword": True, "vInstallId": True}
+            ),
+        )
+        authenticator = self._make_authenticator()
+        await authenticator.async_setup_authentication()
+        await authenticator.async_authenticate()
+
+        # No refresh endpoint registered — would 404 if called.
+        result = await authenticator.async_refresh_access_token(force=False)
+        self.assertEqual("fresh_token", result.access_token)
