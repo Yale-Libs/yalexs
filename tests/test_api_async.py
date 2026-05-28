@@ -1511,9 +1511,7 @@ class TestBrandGuards(unittest.IsolatedAsyncioTestCase):
                 "areaIDs": ["1"],
             },
         )
-        assert (
-            await api.async_arm_alarm(ACCESS_TOKEN, alarm, ArmState.Away) == {}
-        )
+        assert await api.async_arm_alarm(ACCESS_TOKEN, alarm, ArmState.Away) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -1653,9 +1651,7 @@ class TestThinApiWrappers(unittest.IsolatedAsyncioTestCase):
             payload=[],
         )
         api = ApiAsync(self._new_session())
-        assert (
-            await api.async_refresh_access_token(ACCESS_TOKEN) == "legacy-access"
-        )
+        assert await api.async_refresh_access_token(ACCESS_TOKEN) == "legacy-access"
 
     @aioresponses()
     async def test_async_add_websocket_subscription(self, mock):
@@ -1670,9 +1666,7 @@ class TestThinApiWrappers(unittest.IsolatedAsyncioTestCase):
     @aioresponses()
     async def test_async_get_websocket_subscriptions(self, mock):
         mock.get(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(
-                "/websocket/subscribers/sub-1"
-            ),
+            ApiCommon(DEFAULT_BRAND).get_brand_url("/websocket/subscribers/sub-1"),
             body="subscription-detail",
         )
         api = ApiAsync(self._new_session())
