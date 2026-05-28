@@ -420,7 +420,10 @@ async def test_update_house_id_signals_subscribers() -> None:
     """When new activities arrive, subscribers for each updated device are signalled."""
     stream, _api, async_get = _build_stream()
     activity = _make_activity(
-        "dev-1", ActivityType.LOCK_OPERATION, datetime(2026, 1, 1, tzinfo=timezone.utc), action="lock"
+        "dev-1",
+        ActivityType.LOCK_OPERATION,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        action="lock",
     )
     async_get.return_value = [activity]
     callback = MagicMock()
@@ -437,12 +440,18 @@ async def test_process_newer_skips_duplicate_activity() -> None:
     """An identical activity already stored is not re-emitted."""
     stream, *_ = _build_stream()
     first = _make_activity(
-        "dev", ActivityType.LOCK_OPERATION, datetime(2026, 1, 1, tzinfo=timezone.utc), action="lock"
+        "dev",
+        ActivityType.LOCK_OPERATION,
+        datetime(2026, 1, 1, tzinfo=timezone.utc),
+        action="lock",
     )
     stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = first
 
     older = _make_activity(
-        "dev", ActivityType.LOCK_OPERATION, datetime(2025, 12, 31, tzinfo=timezone.utc), action="lock"
+        "dev",
+        ActivityType.LOCK_OPERATION,
+        datetime(2025, 12, 31, tzinfo=timezone.utc),
+        action="lock",
     )
     updated = stream.async_process_newer_device_activities([older])
     assert updated == set()
@@ -454,12 +463,18 @@ async def test_process_newer_stores_new_activity() -> None:
     """A newer activity overwrites the stored one and the device id is reported."""
     stream, *_ = _build_stream()
     older = _make_activity(
-        "dev", ActivityType.LOCK_OPERATION, datetime(2025, 12, 31, tzinfo=timezone.utc), action="lock"
+        "dev",
+        ActivityType.LOCK_OPERATION,
+        datetime(2025, 12, 31, tzinfo=timezone.utc),
+        action="lock",
     )
     stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = older
 
     newer = _make_activity(
-        "dev", ActivityType.LOCK_OPERATION, datetime(2026, 1, 2, tzinfo=timezone.utc), action="lock"
+        "dev",
+        ActivityType.LOCK_OPERATION,
+        datetime(2026, 1, 2, tzinfo=timezone.utc),
+        action="lock",
     )
     updated = stream.async_process_newer_device_activities([newer])
     assert updated == {"dev"}
