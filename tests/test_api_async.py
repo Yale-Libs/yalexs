@@ -1673,6 +1673,11 @@ class TestThinApiWrappers(unittest.IsolatedAsyncioTestCase):
         text = await api.async_get_websocket_subscriptions(ACCESS_TOKEN, "sub-1")
         assert text == "subscription-detail"
 
+    async def test_async_get_websocket_subscriptions_requires_subscriber_id(self):
+        api = ApiAsync(self._new_session())
+        with pytest.raises(ValueError, match="subscriber_id is required"):
+            await api.async_get_websocket_subscriptions(ACCESS_TOKEN)
+
 
 # ---------------------------------------------------------------------------
 # Debug-logging path through _async_dict_to_api (touches the obscure helpers).
