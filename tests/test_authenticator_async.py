@@ -52,10 +52,8 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         mock_aioresponses,
         v_password,
         v_install_id,
-        expires_at=None,
+        expires_at=format_datetime(datetime.utcnow()),  # noqa: B008, DTZ003
     ):
-        if expires_at is None:
-            expires_at = format_datetime(datetime.now(timezone.utc))
         mock_aioresponses.post(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
             headers={"x-august-access-token": "access_token"},
