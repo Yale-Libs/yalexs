@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiohttp import ClientError
 from freezegun.api import FrozenDateTimeFactory
 
+from yalexs.activity import Activity, ActivityType
 from yalexs.api_async import ApiAsync
+from yalexs.exceptions import AugustApiAIOHTTPError
 from yalexs.manager.activity import (
+    ACTIVITY_CATCH_UP_FETCH_LIMIT,
     ACTIVITY_DEBOUNCE_COOLDOWN,
+    ACTIVITY_STREAM_FETCH_LIMIT,
     INITIAL_LOCK_RESYNC_TIME,
     UPDATE_SOON,
     ActivityStream,
@@ -16,6 +22,40 @@ from yalexs.manager.activity import (
 from yalexs.manager.gateway import Gateway
 
 from ..common import fire_time_changed
+
+
+def _make_activity(
+    device_id: str,
+    activity_type: ActivityType,
+    start_time: datetime,
+    action: str = "lock",
+) -> MagicMock:
+    """Build a minimal Activity stand-in with the attrs the stream reads."""
+    activity = MagicMock(spec=Activity)
+    activity.device_id = device_id
+    activity.activity_type = activity_type
+    activity.activity_start_time = start_time
+    activity.action = action
+    return activity
+
+
+def _build_stream(
+    house_ids: set[str] | None = None,
+    push_connected: bool = False,
+) -> tuple[ActivityStream, MagicMock, AsyncMock]:
+    """Construct an ActivityStream with stubbed api/gateway/push."""
+    api = MagicMock(auto_spec=ApiAsync)
+    async_get_house_activities = AsyncMock()
+    api.async_get_house_activities = async_get_house_activities
+    gateway = MagicMock(auto_spec=Gateway)
+    gateway.async_refresh_access_token_if_needed = AsyncMock()
+    gateway.async_get_access_token = AsyncMock(return_value="token")
+    push = MagicMock(connected=push_connected)
+    return (
+        ActivityStream(api, gateway, house_ids or {"house"}, push),
+        api,
+        async_get_house_activities,
+    )
 
 
 @pytest.mark.asyncio
@@ -191,3 +231,245 @@ async def test_activity_stream_debounce_during_init(
     await asyncio.sleep(0)
     assert async_get_house_activities.call_count == 2
     assert "myhouseid" not in activity._schedule_updates
+
+
+@pytest.mark.asyncio
+async def test_get_latest_device_activity_unknown_device() -> None:
+    """Unknown device returns None."""
+    stream, *_ = _build_stream()
+    assert (
+        stream.get_latest_device_activity("nope", {ActivityType.LOCK_OPERATION}) is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_latest_device_activity_picks_newest_type() -> None:
+    """Returns the activity with the most recent start time among requested types."""
+    stream, *_ = _build_stream()
+    now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    older = _make_activity("dev", ActivityType.LOCK_OPERATION, now)
+    newer = _make_activity(
+        "dev", ActivityType.DOOR_OPERATION, now + timedelta(seconds=10)
+    )
+    stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = older
+    stream._latest_activities["dev"][ActivityType.DOOR_OPERATION] = newer
+
+    result = stream.get_latest_device_activity(
+        "dev", {ActivityType.LOCK_OPERATION, ActivityType.DOOR_OPERATION}
+    )
+    assert result is newer
+
+
+@pytest.mark.asyncio
+async def test_get_latest_device_activity_missing_type_returns_other() -> None:
+    """Missing one of the requested types still returns the available one."""
+    stream, *_ = _build_stream()
+    activity = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, datetime(2026, 1, 1, tzinfo=timezone.utc)
+    )
+    stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = activity
+    result = stream.get_latest_device_activity(
+        "dev", {ActivityType.LOCK_OPERATION, ActivityType.DOOR_OPERATION}
+    )
+    assert result is activity
+
+
+@pytest.mark.asyncio
+async def test_async_stop_cancels_tasks_and_future_updates() -> None:
+    """async_stop cancels pending tasks and scheduled callbacks, sets shutdown."""
+    stream, _api, async_get = _build_stream()
+    pending: asyncio.Future = asyncio.get_running_loop().create_future()
+
+    async def _hang(*args, **kwargs):
+        await pending
+        return []
+
+    async_get.side_effect = _hang
+    # Skip async_setup (which would block awaiting the slow task) and start a
+    # pending update task directly, then schedule a future update.
+    stream._start_time = stream._loop.time()
+    stream._create_update_task("house")
+    stream.async_schedule_house_id_refresh("house")
+    assert stream._schedule_updates
+    in_flight = next(iter(stream._update_tasks.values()))
+
+    stream.async_stop()
+
+    assert stream._shutdown is True
+    assert stream._update_tasks == {}
+    assert stream._schedule_updates == {}
+    # Let the cancellation propagate.
+    with pytest.raises(asyncio.CancelledError):
+        await in_flight
+    pending.cancel()
+
+
+@pytest.mark.asyncio
+async def test_async_refresh_skips_when_shutdown() -> None:
+    """_async_refresh is a no-op once shutdown."""
+    stream, _api, _async_get = _build_stream()
+    stream._shutdown = True
+    await stream._async_refresh()
+    stream._august_gateway.async_refresh_access_token_if_needed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_async_first_refresh_skips_when_push_connected() -> None:
+    """When push is connected, no catch-up fetch happens."""
+    stream, _api, async_get = _build_stream(push_connected=True)
+    await stream.async_setup()
+    await asyncio.sleep(0)
+    assert async_get.call_count == 0
+    assert stream.push_updates_connected is True
+
+
+@pytest.mark.asyncio
+async def test_create_update_task_raises_when_running() -> None:
+    """Creating a duplicate update task raises RuntimeError."""
+    stream, _api, async_get = _build_stream()
+    pending: asyncio.Future = asyncio.get_running_loop().create_future()
+
+    async def _hang(*args, **kwargs):
+        await pending
+        return []
+
+    async_get.side_effect = _hang
+    stream._create_update_task("house")
+    assert stream._update_running("house")
+    with pytest.raises(RuntimeError, match="Update already running"):
+        stream._create_update_task("house")
+    stream.async_stop()
+    pending.cancel()
+
+
+@pytest.mark.asyncio
+async def test_schedule_update_cancels_existing_handle() -> None:
+    """Scheduling a new update cancels the previously-scheduled handle."""
+    stream, _api, _async_get = _build_stream()
+    await stream.async_setup()
+    await asyncio.sleep(0)
+    stream.async_schedule_house_id_refresh("house")
+    first_handle = stream._schedule_updates["house"]
+    stream.async_schedule_house_id_refresh("house")
+    second_handle = stream._schedule_updates["house"]
+    assert first_handle is not second_handle
+    assert first_handle.cancelled()
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_schedule_update_replaces_existing_handle() -> None:
+    """_async_schedule_update cancels and replaces an already-scheduled handle."""
+    stream, *_ = _build_stream()
+    now = stream._loop.time()
+    stream._pending_updates["house"] = 1
+    stream._async_schedule_update("house", now, 60.0)
+    first = stream._schedule_updates["house"]
+    # Second call replaces the handle without going through the public refresh API.
+    stream._async_schedule_update("house", now, 30.0)
+    second = stream._schedule_updates["house"]
+    assert first is not second
+    assert first.cancelled()
+    second.cancel()
+
+
+@pytest.mark.asyncio
+async def test_schedule_update_callback_reschedules_when_recent() -> None:
+    """If the callback fires while we updated recently, it reschedules itself."""
+    stream, *_ = _build_stream()
+    stream._start_time = stream._loop.time()
+    stream._pending_updates["house"] = 1
+    # Pretend we just updated so _updated_recently is True.
+    stream._last_update_time["house"] = stream._loop.time()
+    stream._async_schedule_update_callback("house")
+    # The callback must have re-scheduled rather than created an update task.
+    assert "house" in stream._schedule_updates
+    assert "house" not in stream._update_tasks
+    stream._schedule_updates["house"].cancel()
+
+
+@pytest.mark.asyncio
+async def test_schedule_update_noop_when_shutdown() -> None:
+    """_async_schedule_update bails immediately after shutdown."""
+    stream, *_ = _build_stream()
+    stream._shutdown = True
+    stream._async_schedule_update("house", 0.0, 1.0)
+    assert "house" not in stream._schedule_updates
+
+
+@pytest.mark.asyncio
+async def test_update_house_id_skips_when_shutdown() -> None:
+    """_async_update_house_id returns early under shutdown."""
+    stream, _api, async_get = _build_stream()
+    stream._shutdown = True
+    await stream._async_update_house_id("house")
+    async_get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [AugustApiAIOHTTPError("boom"), ClientError("boom")])
+async def test_update_house_id_swallows_request_errors(error: Exception) -> None:
+    """API errors are logged and processing continues without raising."""
+    stream, _api, async_get = _build_stream()
+    async_get.side_effect = error
+    await stream._async_update_house_id("house")
+
+
+@pytest.mark.asyncio
+async def test_update_house_id_signals_subscribers() -> None:
+    """When new activities arrive, subscribers for each updated device are signalled."""
+    stream, _api, async_get = _build_stream()
+    activity = _make_activity(
+        "dev-1", ActivityType.LOCK_OPERATION, datetime(2026, 1, 1, tzinfo=timezone.utc), action="lock"
+    )
+    async_get.return_value = [activity]
+    callback = MagicMock()
+    stream.async_subscribe_device_id("dev-1", callback)
+
+    await stream._async_update_house_id("house")
+
+    callback.assert_called_once()
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_process_newer_skips_duplicate_activity() -> None:
+    """An identical activity already stored is not re-emitted."""
+    stream, *_ = _build_stream()
+    first = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, datetime(2026, 1, 1, tzinfo=timezone.utc), action="lock"
+    )
+    stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = first
+
+    older = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, datetime(2025, 12, 31, tzinfo=timezone.utc), action="lock"
+    )
+    updated = stream.async_process_newer_device_activities([older])
+    assert updated == set()
+    assert stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] is first
+
+
+@pytest.mark.asyncio
+async def test_process_newer_stores_new_activity() -> None:
+    """A newer activity overwrites the stored one and the device id is reported."""
+    stream, *_ = _build_stream()
+    older = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, datetime(2025, 12, 31, tzinfo=timezone.utc), action="lock"
+    )
+    stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = older
+
+    newer = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, datetime(2026, 1, 2, tzinfo=timezone.utc), action="lock"
+    )
+    updated = stream.async_process_newer_device_activities([newer])
+    assert updated == {"dev"}
+    assert stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] is newer
+
+
+@pytest.mark.asyncio
+async def test_activity_limit_switches_after_first_update() -> None:
+    """Before the first update the catch-up limit is used; afterwards the stream limit."""
+    stream, *_ = _build_stream()
+    assert stream._activity_limit() == ACTIVITY_CATCH_UP_FETCH_LIMIT
+    stream._did_first_update = True
+    assert stream._activity_limit() == ACTIVITY_STREAM_FETCH_LIMIT
