@@ -78,7 +78,5 @@ def test_keypad_battery_percentage_falls_back_to_level_lookup() -> None:
 
 def test_keypad_battery_percentage_returns_none_when_no_signal() -> None:
     """Both raw and level missing → percentage is unknowable, returns None."""
-    kp = KeypadDetail(
-        "h", "k", _keypad_data(batteryRaw=None, batteryLevel=None)
-    )
+    kp = KeypadDetail("h", "k", _keypad_data(batteryRaw=None, batteryLevel=None))
     assert kp.battery_percentage is None

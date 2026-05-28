@@ -56,9 +56,7 @@ def test_bridge_detail_status_is_none_when_payload_omits_it() -> None:
 def test_bridge_status_detail_unknown_when_current_missing_or_offline() -> None:
     """Anything other than ``current == "online"`` maps to UNKNOWN at construction."""
     assert BridgeStatusDetail({}).current is BridgeStatus.UNKNOWN
-    assert (
-        BridgeStatusDetail({"current": "offline"}).current is BridgeStatus.UNKNOWN
-    )
+    assert BridgeStatusDetail({"current": "offline"}).current is BridgeStatus.UNKNOWN
 
 
 def test_bridge_status_detail_timestamps_pass_through() -> None:
