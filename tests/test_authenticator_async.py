@@ -1,11 +1,13 @@
 import asyncio
 import json
+import logging
 import os
-import tempfile
+import pathlib
 import unittest
 from datetime import datetime, timedelta, timezone
 
 import aiofiles
+import pytest
 from aiohttp import ClientError, ClientSession
 from aioresponses import aioresponses
 from dateutil.tz import tzutc
@@ -259,172 +261,217 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ValidationResult.INVALID_VERIFICATION_CODE, result)
 
 
-class TestAuthenticatorAsyncCache(unittest.IsolatedAsyncioTestCase):
-    """Coverage for cache-file paths, oauth gating, and refresh short-circuits."""
+# ---------------------------------------------------------------------------
+# Coverage for cache-file paths, oauth gating, and refresh short-circuits.
+# Bare pytest, fully typed — no classes.
+# ---------------------------------------------------------------------------
 
-    def setUp(self):
-        fd, self._cache_path = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
-        # Remove the file so tests start with a clean slate; individual tests
-        # that want a populated cache write into the path explicitly.
-        os.unlink(self._cache_path)
 
-    def tearDown(self):
-        if os.path.exists(self._cache_path):
-            os.unlink(self._cache_path)
+@pytest.fixture
+def mock_aioresponse() -> aioresponses:
+    with aioresponses() as m:
+        yield m
 
-    def _new_session(self) -> ClientSession:
-        session = ClientSession()
-        self.addAsyncCleanup(session.close)
-        return session
 
-    def _make_authenticator(self, brand=DEFAULT_BRAND) -> AuthenticatorAsync:
-        return AuthenticatorAsync(
-            ApiAsync(self._new_session(), brand=brand),
-            "phone",
-            "user",
-            "pass",
-            install_id="install_id",
-            access_token_cache_file=self._cache_path,
-        )
+@pytest.fixture
+def cache_path(tmp_path: pathlib.Path) -> str:
+    # Hand out a path that does not exist yet; tests that want a populated
+    # cache write into it explicitly.
+    return str(tmp_path / "auth-cache.json")
 
-    async def _write_cache(self, expires_at: datetime) -> None:
-        payload = {
-            "install_id": "cached_install",
-            "access_token": "cached_token",
-            "access_token_expires": expires_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-            "state": AuthenticationState.AUTHENTICATED.value,
-        }
-        async with aiofiles.open(self._cache_path, "w") as f:
-            await f.write(json.dumps(payload))
 
-    async def test_setup_authentication_with_missing_cache_file(self):
-        authenticator = self._make_authenticator()
+def _make_authenticator(
+    session: ClientSession,
+    cache_path: str,
+    brand: Brand = DEFAULT_BRAND,
+) -> AuthenticatorAsync:
+    return AuthenticatorAsync(
+        ApiAsync(session, brand=brand),
+        "phone",
+        "user",
+        "pass",
+        install_id="install_id",
+        access_token_cache_file=cache_path,
+    )
+
+
+async def _write_cache(cache_path: str, expires_at: datetime) -> None:
+    payload = {
+        "install_id": "cached_install",
+        "access_token": "cached_token",
+        "access_token_expires": expires_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        "state": AuthenticationState.AUTHENTICATED.value,
+    }
+    async with aiofiles.open(cache_path, "w") as f:
+        await f.write(json.dumps(payload))
+
+
+@pytest.mark.asyncio
+async def test_setup_authentication_with_missing_cache_file(
+    cache_path: str,
+) -> None:
+    async with ClientSession() as session:
+        authenticator = _make_authenticator(session, cache_path)
         await authenticator.async_setup_authentication()
         # Falls through to fresh REQUIRES_AUTHENTICATION state.
-        self.assertEqual(
-            AuthenticationState.REQUIRES_AUTHENTICATION,
-            authenticator._authentication.state,
+        assert (
+            authenticator._authentication.state
+            == AuthenticationState.REQUIRES_AUTHENTICATION
         )
-        self.assertEqual("install_id", authenticator._authentication.install_id)
+        assert authenticator._authentication.install_id == "install_id"
 
-    async def test_setup_authentication_with_invalid_json(self):
-        async with aiofiles.open(self._cache_path, "w") as f:
-            await f.write("not-json{")
-        authenticator = self._make_authenticator()
+
+@pytest.mark.asyncio
+async def test_setup_authentication_with_invalid_json(cache_path: str) -> None:
+    async with aiofiles.open(cache_path, "w") as f:
+        await f.write("not-json{")
+    async with ClientSession() as session:
+        authenticator = _make_authenticator(session, cache_path)
         await authenticator.async_setup_authentication()
-        self.assertEqual(
-            AuthenticationState.REQUIRES_AUTHENTICATION,
-            authenticator._authentication.state,
+        assert (
+            authenticator._authentication.state
+            == AuthenticationState.REQUIRES_AUTHENTICATION
         )
 
-    async def test_setup_authentication_loads_valid_cache(self):
-        # Far-future expiration → no warning, loaded as-is.
-        await self._write_cache(datetime.now(timezone.utc) + timedelta(days=30))
-        authenticator = self._make_authenticator()
+
+@pytest.mark.asyncio
+async def test_setup_authentication_loads_valid_cache(cache_path: str) -> None:
+    # Far-future expiration → no warning, loaded as-is.
+    await _write_cache(cache_path, datetime.now(timezone.utc) + timedelta(days=30))
+    async with ClientSession() as session:
+        authenticator = _make_authenticator(session, cache_path)
         await authenticator.async_setup_authentication()
-        self.assertEqual(
-            AuthenticationState.AUTHENTICATED, authenticator._authentication.state
+        assert (
+            authenticator._authentication.state == AuthenticationState.AUTHENTICATED
         )
-        self.assertEqual("cached_token", authenticator._authentication.access_token)
-        self.assertEqual("cached_install", authenticator._authentication.install_id)
+        assert authenticator._authentication.access_token == "cached_token"
+        assert authenticator._authentication.install_id == "cached_install"
 
-    async def test_setup_authentication_with_expired_cache(self):
-        await self._write_cache(datetime.now(timezone.utc) - timedelta(days=1))
-        authenticator = self._make_authenticator()
+
+@pytest.mark.asyncio
+async def test_setup_authentication_with_expired_cache(cache_path: str) -> None:
+    await _write_cache(cache_path, datetime.now(timezone.utc) - timedelta(days=1))
+    async with ClientSession() as session:
+        authenticator = _make_authenticator(session, cache_path)
         await authenticator.async_setup_authentication()
         # Expired tokens reset state to REQUIRES_AUTHENTICATION.
-        self.assertEqual(
-            AuthenticationState.REQUIRES_AUTHENTICATION,
-            authenticator._authentication.state,
+        assert (
+            authenticator._authentication.state
+            == AuthenticationState.REQUIRES_AUTHENTICATION
         )
         # install_id from the configured authenticator, not the cached one.
-        self.assertEqual("install_id", authenticator._authentication.install_id)
+        assert authenticator._authentication.install_id == "install_id"
 
-    async def test_setup_authentication_with_soon_expiring_cache_warns(self):
-        # Within the 7-day renewal threshold → logs a warning but keeps the token.
-        await self._write_cache(datetime.now(timezone.utc) + timedelta(days=2))
-        authenticator = self._make_authenticator()
-        with self.assertLogs("yalexs.authenticator_async", level="WARNING") as logs:
-            await authenticator.async_setup_authentication()
-        self.assertTrue(
-            any("going to expire" in m for m in logs.output),
-            f"expected expiry warning, got: {logs.output}",
-        )
-        self.assertEqual(
-            AuthenticationState.AUTHENTICATED, authenticator._authentication.state
+
+@pytest.mark.asyncio
+async def test_setup_authentication_with_soon_expiring_cache_warns(
+    cache_path: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Within the 7-day renewal threshold → logs a warning but keeps the token.
+    await _write_cache(cache_path, datetime.now(timezone.utc) + timedelta(days=2))
+    caplog.set_level(logging.WARNING, logger="yalexs.authenticator_async")
+    async with ClientSession() as session:
+        authenticator = _make_authenticator(session, cache_path)
+        await authenticator.async_setup_authentication()
+        assert any(
+            r.name == "yalexs.authenticator_async"
+            and r.levelno == logging.WARNING
+            and "going to expire" in r.getMessage()
+            for r in caplog.records
+        ), f"expected expiry warning, got: {caplog.records}"
+        assert (
+            authenticator._authentication.state == AuthenticationState.AUTHENTICATED
         )
 
-    @aioresponses()
-    async def test_authenticate_writes_cache_file(self, mock_aioresponses):
-        # Round-trip: a successful authenticate() should persist to disk.
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).strftime(
-            "%Y-%m-%d %H:%M:%S.%f"
-        )[:-3] + "Z"
-        mock_aioresponses.post(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
-            headers={"x-august-access-token": "fresh_token"},
-            body=json.dumps(
-                {"expiresAt": expires_at, "vPassword": True, "vInstallId": True}
-            ),
-        )
-        authenticator = self._make_authenticator()
+
+@pytest.mark.asyncio
+async def test_authenticate_writes_cache_file(
+    cache_path: str,
+    mock_aioresponse: aioresponses,
+) -> None:
+    # Round-trip: a successful authenticate() should persist to disk.
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).strftime(
+        "%Y-%m-%d %H:%M:%S.%f"
+    )[:-3] + "Z"
+    mock_aioresponse.post(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
+        headers={"x-august-access-token": "fresh_token"},
+        body=json.dumps(
+            {"expiresAt": expires_at, "vPassword": True, "vInstallId": True}
+        ),
+    )
+    async with ClientSession() as session:
+        authenticator = _make_authenticator(session, cache_path)
         await authenticator.async_setup_authentication()
         await authenticator.async_authenticate()
 
-        exists = await asyncio.to_thread(os.path.exists, self._cache_path)
-        self.assertTrue(exists)
-        async with aiofiles.open(self._cache_path) as f:
+        exists = await asyncio.to_thread(os.path.exists, cache_path)
+        assert exists
+        async with aiofiles.open(cache_path) as f:
             stored = json.loads(await f.read())
-        self.assertEqual("fresh_token", stored["access_token"])
-        self.assertEqual(AuthenticationState.AUTHENTICATED.value, stored["state"])
+        assert stored["access_token"] == "fresh_token"
+        assert stored["state"] == AuthenticationState.AUTHENTICATED.value
 
-    async def test_authenticate_raises_for_oauth_required_brand(self):
+
+@pytest.mark.asyncio
+async def test_authenticate_raises_for_oauth_required_brand() -> None:
+    async with ClientSession() as session:
         authenticator = AuthenticatorAsync(
-            ApiAsync(self._new_session(), brand=Brand.YALE_GLOBAL),
+            ApiAsync(session, brand=Brand.YALE_GLOBAL),
             "phone",
             "user",
             "pass",
             install_id="install_id",
         )
         await authenticator.async_setup_authentication()
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             await authenticator.async_authenticate()
 
-    @aioresponses()
-    async def test_refresh_short_circuits_when_not_authenticated(
-        self, mock_aioresponses
-    ):
-        authenticator = self._make_authenticator()
+
+@pytest.mark.asyncio
+async def test_refresh_short_circuits_when_not_authenticated(
+    cache_path: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="yalexs.authenticator_async")
+    async with ClientSession() as session:
+        authenticator = _make_authenticator(session, cache_path)
         await authenticator.async_setup_authentication()
         # State is REQUIRES_AUTHENTICATION → refresh logs warning and returns
         # current authentication without hitting the API.
-        with self.assertLogs("yalexs.authenticator_async", level="WARNING") as logs:
-            result = await authenticator.async_refresh_access_token(force=True)
-        self.assertTrue(
-            any("not authenticated" in m for m in logs.output),
-            f"expected not-authenticated warning, got: {logs.output}",
-        )
-        self.assertIs(result, authenticator._authentication)
+        result = await authenticator.async_refresh_access_token(force=True)
+        assert any(
+            r.name == "yalexs.authenticator_async"
+            and r.levelno == logging.WARNING
+            and "not authenticated" in r.getMessage()
+            for r in caplog.records
+        ), f"expected not-authenticated warning, got: {caplog.records}"
+        assert result is authenticator._authentication
 
-    @aioresponses()
-    async def test_refresh_no_op_when_refresh_not_needed(self, mock_aioresponses):
-        # Authenticate with a far-future expiration, then refresh(force=False)
-        # should short-circuit without calling the API.
-        far_future = (datetime.now(timezone.utc) + timedelta(days=30)).strftime(
-            "%Y-%m-%d %H:%M:%S.%f"
-        )[:-3] + "Z"
-        mock_aioresponses.post(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
-            headers={"x-august-access-token": "fresh_token"},
-            body=json.dumps(
-                {"expiresAt": far_future, "vPassword": True, "vInstallId": True}
-            ),
-        )
-        authenticator = self._make_authenticator()
+
+@pytest.mark.asyncio
+async def test_refresh_no_op_when_refresh_not_needed(
+    cache_path: str,
+    mock_aioresponse: aioresponses,
+) -> None:
+    # Authenticate with a far-future expiration, then refresh(force=False)
+    # should short-circuit without calling the API.
+    far_future = (datetime.now(timezone.utc) + timedelta(days=30)).strftime(
+        "%Y-%m-%d %H:%M:%S.%f"
+    )[:-3] + "Z"
+    mock_aioresponse.post(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
+        headers={"x-august-access-token": "fresh_token"},
+        body=json.dumps(
+            {"expiresAt": far_future, "vPassword": True, "vInstallId": True}
+        ),
+    )
+    async with ClientSession() as session:
+        authenticator = _make_authenticator(session, cache_path)
         await authenticator.async_setup_authentication()
         await authenticator.async_authenticate()
 
         # No refresh endpoint registered — would 404 if called.
         result = await authenticator.async_refresh_access_token(force=False)
-        self.assertEqual("fresh_token", result.access_token)
+        assert result.access_token == "fresh_token"
