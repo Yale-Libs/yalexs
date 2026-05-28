@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,19 +14,6 @@ from yalexs.const import Brand
 from yalexs.manager.socketio import SocketIORunner
 
 
-class _FakeAsyncClient:
-    """Minimal AsyncClient stand-in that records handlers and connect calls."""
-
-    def __init__(self) -> None:
-        self.handlers: dict[str, Any] = {}
-        self.connect = AsyncMock()
-        self.wait = AsyncMock()
-
-    def event(self, func):
-        self.handlers[func.__name__] = func
-        return func
-
-
 def _make_gateway(token: str = "tok") -> MagicMock:  # noqa: S107
     gateway = MagicMock()
     gateway.async_get_access_token = AsyncMock(return_value=token)
@@ -34,6 +22,24 @@ def _make_gateway(token: str = "tok") -> MagicMock:  # noqa: S107
         return_value={"subscriberID": "sub-123"}
     )
     return gateway
+
+
+@pytest.fixture
+def fake_socketio_client() -> Iterator[MagicMock]:
+    """Stub `socketio.AsyncClient` and yield a fake that records event handlers."""
+    handlers: dict[str, Callable[..., Any]] = {}
+    client = MagicMock()
+    client.handlers = handlers
+    client.connect = AsyncMock()
+    client.wait = AsyncMock()
+
+    def _event(func: Callable[..., Any]) -> Callable[..., Any]:
+        handlers[func.__name__] = func
+        return func
+
+    client.event = _event
+    with patch("yalexs.manager.socketio.socketio.AsyncClient", return_value=client):
+        yield client
 
 
 def test_subscribe_returns_remover_that_pops_callback() -> None:
@@ -63,45 +69,46 @@ async def test_refresh_access_token_pulls_from_gateway() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_internal_wires_handlers_and_connects_to_subscriber_url() -> None:
-    fake = _FakeAsyncClient()
+async def test_run_internal_wires_handlers_and_connects_to_subscriber_url(
+    fake_socketio_client: MagicMock,
+) -> None:
     runner = SocketIORunner(_make_gateway())
     runner._subscriber_id = "abc"
     runner._access_token = "tok"
 
-    with patch("yalexs.manager.socketio.socketio.AsyncClient", return_value=fake):
-        await runner._run()
+    await runner._run()
 
     # connect/data/disconnect handlers registered.
-    assert set(fake.handlers) == {"connect", "data", "disconnect"}
+    assert set(fake_socketio_client.handlers) == {"connect", "data", "disconnect"}
 
-    fake.connect.assert_awaited_once()
-    args, kwargs = fake.connect.call_args
+    fake_socketio_client.connect.assert_awaited_once()
+    args, kwargs = fake_socketio_client.connect.call_args
     assert "subscriberID=abc" in args[0]
     assert kwargs["transports"] == ["websocket"]
     assert kwargs["retry"] is True
     # headers callable is passed, not a dict — socketio calls it on reconnect.
     assert callable(kwargs["headers"])
     assert kwargs["headers"]() == runner.headers()
-    fake.wait.assert_awaited_once()
+    fake_socketio_client.wait.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_connect_handler_marks_connected() -> None:
-    fake = _FakeAsyncClient()
+async def test_connect_handler_marks_connected(
+    fake_socketio_client: MagicMock,
+) -> None:
     runner = SocketIORunner(_make_gateway())
     runner._subscriber_id = "abc"
-    with patch("yalexs.manager.socketio.socketio.AsyncClient", return_value=fake):
-        await runner._run()
+    await runner._run()
 
     assert runner.connected is False
-    fake.handlers["connect"]()
+    fake_socketio_client.handlers["connect"]()
     assert runner.connected is True
 
 
 @pytest.mark.asyncio
-async def test_data_handler_dispatches_to_all_listeners() -> None:
-    fake = _FakeAsyncClient()
+async def test_data_handler_dispatches_to_all_listeners(
+    fake_socketio_client: MagicMock,
+) -> None:
     runner = SocketIORunner(_make_gateway())
     runner._subscriber_id = "abc"
     cb1 = MagicMock()
@@ -109,11 +116,10 @@ async def test_data_handler_dispatches_to_all_listeners() -> None:
     runner.subscribe(cb1)
     runner.subscribe(cb2)
 
-    with patch("yalexs.manager.socketio.socketio.AsyncClient", return_value=fake):
-        await runner._run()
+    await runner._run()
 
     payload = {"lockID": "lock-7", "status": "locked"}
-    fake.handlers["data"](payload)
+    fake_socketio_client.handlers["data"](payload)
 
     for cb in (cb1, cb2):
         cb.assert_called_once()
@@ -125,34 +131,32 @@ async def test_data_handler_dispatches_to_all_listeners() -> None:
 
 
 @pytest.mark.asyncio
-async def test_data_handler_with_missing_lockid_passes_none() -> None:
-    fake = _FakeAsyncClient()
+async def test_data_handler_with_missing_lockid_passes_none(
+    fake_socketio_client: MagicMock,
+) -> None:
     runner = SocketIORunner(_make_gateway())
     runner._subscriber_id = "abc"
     cb = MagicMock()
     runner.subscribe(cb)
-    with patch("yalexs.manager.socketio.socketio.AsyncClient", return_value=fake):
-        await runner._run()
+    await runner._run()
 
-    fake.handlers["data"]({"status": "locked"})
+    fake_socketio_client.handlers["data"]({"status": "locked"})
     device_id, _, _ = cb.call_args.args
     assert device_id is None
 
 
 @pytest.mark.asyncio
-async def test_disconnect_handler_schedules_token_refresh_and_clears_connected() -> (
-    None
-):
-    fake = _FakeAsyncClient()
+async def test_disconnect_handler_schedules_token_refresh_and_clears_connected(
+    fake_socketio_client: MagicMock,
+) -> None:
     gateway = _make_gateway(token="refreshed")
     runner = SocketIORunner(gateway)
     runner._subscriber_id = "abc"
     runner.connected = True
 
-    with patch("yalexs.manager.socketio.socketio.AsyncClient", return_value=fake):
-        await runner._run()
+    await runner._run()
 
-    fake.handlers["disconnect"]()
+    fake_socketio_client.handlers["disconnect"]()
     assert runner.connected is False
     assert runner._refresh_task is not None
     # let the eager task settle.
