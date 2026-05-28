@@ -1,3 +1,4 @@
+import logging
 import os
 import unittest
 from datetime import datetime
@@ -1394,93 +1395,99 @@ async def test_retry_502_429(status_code: int, mock_aioresponse: aioresponses) -
 # ---------------------------------------------------------------------------
 
 
-class TestObscurePayload:
-    def test_none_returns_none(self):
-        assert _obscure_payload(None) is None
-
-    def test_no_password_returns_unchanged_dict(self):
-        payload = {"username": "alice", "code": "123"}
-        out = _obscure_payload(payload)
-        assert out == {"username": "alice", "code": "123"}
-
-    def test_password_is_masked(self):
-        payload = {"username": "alice", "password": "supersecret"}
-        out = _obscure_payload(payload)
-        assert out["password"] == "****"
-        assert out["username"] == "alice"
-
-    def test_original_payload_not_mutated(self):
-        payload = {"password": "supersecret"}
-        _obscure_payload(payload)
-        assert payload["password"] == "supersecret"
+def test_obscure_payload_none_returns_none() -> None:
+    assert _obscure_payload(None) is None
 
 
-class TestObscureHeaders:
-    def test_none_returns_none(self):
-        assert _obscure_headers(None) is None
+def test_obscure_payload_no_password_returns_unchanged_dict() -> None:
+    payload = {"username": "alice", "code": "123"}
+    out = _obscure_payload(payload)
+    assert out == {"username": "alice", "code": "123"}
 
-    def test_no_secret_headers_returns_unchanged(self):
-        headers = {"Content-Type": "application/json"}
-        out = _obscure_headers(headers)
-        assert out == {"Content-Type": "application/json"}
 
-    @pytest.mark.parametrize(
-        "header_name",
-        [
-            "x-august-access-token",
-            "x-access-token",
-            "x-august-api-key",
-            "x-api-key",
-        ],
-    )
-    def test_each_secret_header_is_masked(self, header_name):
-        headers = {header_name: "secret-value", "Content-Type": "application/json"}
-        out = _obscure_headers(headers)
-        assert out[header_name] == "****"
-        assert out["Content-Type"] == "application/json"
+def test_obscure_payload_password_is_masked() -> None:
+    payload = {"username": "alice", "password": "supersecret"}
+    out = _obscure_payload(payload)
+    assert out["password"] == "****"
+    assert out["username"] == "alice"
 
-    def test_multiple_secret_headers_masked(self):
-        headers = {
-            "x-access-token": "tok",
-            "x-api-key": "key",
-            "Accept": "application/json",
-        }
-        out = _obscure_headers(headers)
-        assert out["x-access-token"] == "****"
-        assert out["x-api-key"] == "****"
-        assert out["Accept"] == "application/json"
 
-    def test_original_headers_not_mutated(self):
-        headers = {"x-access-token": "secret"}
-        _obscure_headers(headers)
-        assert headers["x-access-token"] == "secret"
+def test_obscure_payload_original_payload_not_mutated() -> None:
+    payload = {"password": "supersecret"}
+    _obscure_payload(payload)
+    assert payload["password"] == "supersecret"
+
+
+def test_obscure_headers_none_returns_none() -> None:
+    assert _obscure_headers(None) is None
+
+
+def test_obscure_headers_no_secret_headers_returns_unchanged() -> None:
+    headers = {"Content-Type": "application/json"}
+    out = _obscure_headers(headers)
+    assert out == {"Content-Type": "application/json"}
+
+
+@pytest.mark.parametrize(
+    "header_name",
+    [
+        "x-august-access-token",
+        "x-access-token",
+        "x-august-api-key",
+        "x-api-key",
+    ],
+)
+def test_obscure_headers_each_secret_header_is_masked(header_name: str) -> None:
+    headers = {header_name: "secret-value", "Content-Type": "application/json"}
+    out = _obscure_headers(headers)
+    assert out[header_name] == "****"
+    assert out["Content-Type"] == "application/json"
+
+
+def test_obscure_headers_multiple_secret_headers_masked() -> None:
+    headers = {
+        "x-access-token": "tok",
+        "x-api-key": "key",
+        "Accept": "application/json",
+    }
+    out = _obscure_headers(headers)
+    assert out["x-access-token"] == "****"
+    assert out["x-api-key"] == "****"
+    assert out["Accept"] == "application/json"
+
+
+def test_obscure_headers_original_headers_not_mutated() -> None:
+    headers = {"x-access-token": "secret"}
+    _obscure_headers(headers)
+    assert headers["x-access-token"] == "secret"
 
 
 # ---------------------------------------------------------------------------
-# Brand-guarded methods: returns sentinels when the brand does not support
+# Brand-guarded methods: return sentinels when the brand does not support
 # doorbells or alarms.
 # ---------------------------------------------------------------------------
 
 
-class TestBrandGuards(unittest.IsolatedAsyncioTestCase):
-    def _new_session(self) -> ClientSession:
-        session = ClientSession()
-        self.addAsyncCleanup(session.close)
-        return session
-
-    async def test_async_get_doorbells_returns_empty_when_unsupported(self):
-        api = ApiAsync(self._new_session())
-        # Override the cached_property to simulate an unsupported brand.
+@pytest.mark.asyncio
+async def test_async_get_doorbells_returns_empty_when_unsupported() -> None:
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         api.brand_supports_doorbells = False
         assert await api.async_get_doorbells(ACCESS_TOKEN) == []
 
-    async def test_async_get_alarms_returns_empty_when_unsupported(self):
-        api = ApiAsync(self._new_session())
+
+@pytest.mark.asyncio
+async def test_async_get_alarms_returns_empty_when_unsupported() -> None:
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         api.brand_supports_alarms = False
         assert await api.async_get_alarms(ACCESS_TOKEN) == []
 
-    async def test_async_get_alarm_devices_returns_empty_when_unsupported(self):
-        api = ApiAsync(self._new_session())
+
+@pytest.mark.asyncio
+async def test_async_get_alarm_devices_returns_empty_when_unsupported() -> None:
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         api.brand_supports_alarms = False
         alarm = Alarm(
             "alarm-1",
@@ -1496,8 +1503,11 @@ class TestBrandGuards(unittest.IsolatedAsyncioTestCase):
         )
         assert await api.async_get_alarm_devices(ACCESS_TOKEN, alarm) == []
 
-    async def test_async_arm_alarm_returns_empty_dict_when_unsupported(self):
-        api = ApiAsync(self._new_session())
+
+@pytest.mark.asyncio
+async def test_async_arm_alarm_returns_empty_dict_when_unsupported() -> None:
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         api.brand_supports_alarms = False
         alarm = Alarm(
             "alarm-1",
@@ -1539,144 +1549,151 @@ _ALARM_DEVICE_DICT = {
 }
 
 
-class TestAlarmEndpoints(unittest.IsolatedAsyncioTestCase):
-    def _new_session(self) -> ClientSession:
-        session = ClientSession()
-        self.addAsyncCleanup(session.close)
-        return session
-
-    @aioresponses()
-    async def test_async_get_alarms_returns_alarms(self, mock):
-        mock.get(
-            ApiCommon(Brand.YALE_GLOBAL).get_brand_url(API_GET_ALARMS_URL),
-            payload=[_ALARM_DICT],
-        )
-        api = ApiAsync(self._new_session(), brand=Brand.YALE_GLOBAL)
+@pytest.mark.asyncio
+async def test_async_get_alarms_returns_alarms(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(Brand.YALE_GLOBAL).get_brand_url(API_GET_ALARMS_URL),
+        payload=[_ALARM_DICT],
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session, brand=Brand.YALE_GLOBAL)
         alarms = await api.async_get_alarms(ACCESS_TOKEN)
         assert len(alarms) == 1
         assert alarms[0].device_id == "alarm-1"
 
-    @aioresponses()
-    async def test_async_get_alarm_devices_returns_devices(self, mock):
-        mock.get(
-            ApiCommon(Brand.YALE_GLOBAL).get_brand_url(
-                API_GET_ALARM_DEVICES_URL.format(alarm_id="alarm-1")
-            ),
-            payload=[_ALARM_DEVICE_DICT],
-        )
-        api = ApiAsync(self._new_session(), brand=Brand.YALE_GLOBAL)
+
+@pytest.mark.asyncio
+async def test_async_get_alarm_devices_returns_devices(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(Brand.YALE_GLOBAL).get_brand_url(
+            API_GET_ALARM_DEVICES_URL.format(alarm_id="alarm-1")
+        ),
+        payload=[_ALARM_DEVICE_DICT],
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session, brand=Brand.YALE_GLOBAL)
         alarm = Alarm("alarm-1", _ALARM_DICT)
         devices = await api.async_get_alarm_devices(ACCESS_TOKEN, alarm)
         assert len(devices) == 1
         assert devices[0].device_id == "dev-1"
 
-    @aioresponses()
-    async def test_async_arm_alarm_posts_state_and_returns_json(self, mock):
-        alarm = Alarm("alarm-1", _ALARM_DICT)
-        url = ApiCommon(Brand.YALE_GLOBAL).get_brand_url(
-            API_PUT_ALARM_URL.format(alarm_id=alarm.device_id, arm_state=ArmState.Away)
-        )
-        mock.put(url, payload={"ok": True})
-        api = ApiAsync(self._new_session(), brand=Brand.YALE_GLOBAL)
+
+@pytest.mark.asyncio
+async def test_async_arm_alarm_posts_state_and_returns_json(
+    mock_aioresponse: aioresponses,
+) -> None:
+    alarm = Alarm("alarm-1", _ALARM_DICT)
+    url = ApiCommon(Brand.YALE_GLOBAL).get_brand_url(
+        API_PUT_ALARM_URL.format(alarm_id=alarm.device_id, arm_state=ArmState.Away)
+    )
+    mock_aioresponse.put(url, payload={"ok": True})
+    async with ClientSession() as session:
+        api = ApiAsync(session, brand=Brand.YALE_GLOBAL)
         result = await api.async_arm_alarm(ACCESS_TOKEN, alarm, ArmState.Away)
         assert result == {"ok": True}
 
 
 # ---------------------------------------------------------------------------
 # Thin async wrappers without dedicated coverage so far: wakeup_doorbell,
-# get_houses, get_house, refresh_access_token, websocket subscription helpers.
+# get_houses, get_house, refresh_access_token, websocket subscription.
 # ---------------------------------------------------------------------------
 
 
-class TestThinApiWrappers(unittest.IsolatedAsyncioTestCase):
-    def _new_session(self) -> ClientSession:
-        session = ClientSession()
-        self.addAsyncCleanup(session.close)
-        return session
-
-    @aioresponses()
-    async def test_async_wakeup_doorbell_returns_true(self, mock):
-        mock.get(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(
-                API_WAKEUP_DOORBELL_URL.format(doorbell_id="D1")
-            ),
-            payload={},
-        )
-        api = ApiAsync(self._new_session())
+@pytest.mark.asyncio
+async def test_async_wakeup_doorbell_returns_true(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(
+            API_WAKEUP_DOORBELL_URL.format(doorbell_id="D1")
+        ),
+        payload={},
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         assert await api.async_wakeup_doorbell(ACCESS_TOKEN, "D1") is True
 
-    @aioresponses()
-    async def test_async_get_houses_returns_response(self, mock):
-        mock.get(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
-            payload=[{"HouseID": "h1"}],
-        )
-        api = ApiAsync(self._new_session())
+
+@pytest.mark.asyncio
+async def test_async_get_houses_returns_response(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
+        payload=[{"HouseID": "h1"}],
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         response = await api.async_get_houses(ACCESS_TOKEN)
         assert isinstance(response, ClientResponse)
         assert await response.json() == [{"HouseID": "h1"}]
 
-    @aioresponses()
-    async def test_async_get_house_returns_dict(self, mock):
-        mock.get(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(
-                API_GET_HOUSE_URL.format(house_id="h1")
-            ),
-            payload={"HouseID": "h1", "name": "Home"},
-        )
-        api = ApiAsync(self._new_session())
+
+@pytest.mark.asyncio
+async def test_async_get_house_returns_dict(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(
+            API_GET_HOUSE_URL.format(house_id="h1")
+        ),
+        payload={"HouseID": "h1", "name": "Home"},
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         assert await api.async_get_house(ACCESS_TOKEN, "h1") == {
             "HouseID": "h1",
             "name": "Home",
         }
 
-    @aioresponses()
-    async def test_refresh_access_token_prefers_access_token_header(self, mock):
-        mock.get(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
-            headers={
-                HEADER_ACCESS_TOKEN: "new-access",
-                HEADER_AUGUST_ACCESS_TOKEN: "legacy-access",
-            },
-            payload=[],
-        )
-        api = ApiAsync(self._new_session())
+
+@pytest.mark.asyncio
+async def test_refresh_access_token_prefers_access_token_header(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
+        headers={
+            HEADER_ACCESS_TOKEN: "new-access",
+            HEADER_AUGUST_ACCESS_TOKEN: "legacy-access",
+        },
+        payload=[],
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         assert await api.async_refresh_access_token(ACCESS_TOKEN) == "new-access"
 
-    @aioresponses()
-    async def test_refresh_access_token_falls_back_to_august_header(self, mock):
-        mock.get(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
-            headers={HEADER_AUGUST_ACCESS_TOKEN: "legacy-access"},
-            payload=[],
-        )
-        api = ApiAsync(self._new_session())
+
+@pytest.mark.asyncio
+async def test_refresh_access_token_falls_back_to_august_header(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
+        headers={HEADER_AUGUST_ACCESS_TOKEN: "legacy-access"},
+        payload=[],
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         assert await api.async_refresh_access_token(ACCESS_TOKEN) == "legacy-access"
 
-    @aioresponses()
-    async def test_async_add_websocket_subscription(self, mock):
-        mock.post(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(API_WEBSOCKET_SUBSCRIBERS),
-            payload={"subscriberId": "sub-1"},
-        )
-        api = ApiAsync(self._new_session())
+
+@pytest.mark.asyncio
+async def test_async_add_websocket_subscription(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.post(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(API_WEBSOCKET_SUBSCRIBERS),
+        payload={"subscriberId": "sub-1"},
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session)
         result = await api.async_add_websocket_subscription(ACCESS_TOKEN)
         assert result == {"subscriberId": "sub-1"}
-
-    @aioresponses()
-    async def test_async_get_websocket_subscriptions(self, mock):
-        mock.get(
-            ApiCommon(DEFAULT_BRAND).get_brand_url("/websocket/subscribers/sub-1"),
-            body="subscription-detail",
-        )
-        api = ApiAsync(self._new_session())
-        text = await api.async_get_websocket_subscriptions(ACCESS_TOKEN, "sub-1")
-        assert text == "subscription-detail"
-
-    async def test_async_get_websocket_subscriptions_requires_subscriber_id(self):
-        api = ApiAsync(self._new_session())
-        with pytest.raises(ValueError, match="subscriber_id is required"):
-            await api.async_get_websocket_subscriptions(ACCESS_TOKEN)
 
 
 # ---------------------------------------------------------------------------
@@ -1684,20 +1701,18 @@ class TestThinApiWrappers(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestDebugLoggingPath(unittest.IsolatedAsyncioTestCase):
-    def _new_session(self) -> ClientSession:
-        session = ClientSession()
-        self.addAsyncCleanup(session.close)
-        return session
-
-    @aioresponses()
-    async def test_debug_logging_does_not_break_request(self, mock):
-        mock.get(
-            ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_USER_URL),
-            payload={"UserID": "abc"},
-        )
-        api = ApiAsync(self._new_session())
-        with self.assertLogs("yalexs.api_async", level="DEBUG") as captured:
-            result = await api.async_get_user(ACCESS_TOKEN)
-        assert result == {"UserID": "abc"}
-        assert captured.records, "expected at least one debug record"
+@pytest.mark.asyncio
+async def test_debug_logging_does_not_break_request(
+    caplog: pytest.LogCaptureFixture,
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_USER_URL),
+        payload={"UserID": "abc"},
+    )
+    caplog.set_level(logging.DEBUG, logger="yalexs.api_async")
+    async with ClientSession() as session:
+        api = ApiAsync(session)
+        result = await api.async_get_user(ACCESS_TOKEN)
+    assert result == {"UserID": "abc"}
+    assert caplog.records, "expected at least one debug record"
