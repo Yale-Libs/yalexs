@@ -2066,9 +2066,7 @@ def test_is_unchanged_push_state_websocket_without_relevant_fields_is_processed(
 ):
     data = _make_bare_push_state_holder()
     assert (
-        data._is_unchanged_push_state(
-            "d", {"unrelated": "x"}, SOURCE_WEBSOCKET, []
-        )
+        data._is_unchanged_push_state("d", {"unrelated": "x"}, SOURCE_WEBSOCKET, [])
         is False
     )
 
