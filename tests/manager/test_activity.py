@@ -44,10 +44,10 @@ def _build_stream(
     push_connected: bool = False,
 ) -> tuple[ActivityStream, MagicMock, AsyncMock]:
     """Construct an ActivityStream with stubbed api/gateway/push."""
-    api = MagicMock(auto_spec=ApiAsync)
+    api = MagicMock(spec=ApiAsync)
     async_get_house_activities = AsyncMock()
     api.async_get_house_activities = async_get_house_activities
-    gateway = MagicMock(auto_spec=Gateway)
+    gateway = MagicMock(spec=Gateway)
     gateway.async_refresh_access_token_if_needed = AsyncMock()
     gateway.async_get_access_token = AsyncMock(return_value="token")
     push = MagicMock(connected=push_connected)
@@ -62,10 +62,10 @@ def _build_stream(
 async def test_activity_stream_debounce(freezer: FrozenDateTimeFactory) -> None:
     """Test activity stream debounce."""
 
-    api = MagicMock(auto_spec=ApiAsync)
+    api = MagicMock(spec=ApiAsync)
     async_get_house_activities = AsyncMock()
     api.async_get_house_activities = async_get_house_activities
-    august_gateway = MagicMock(auto_spec=Gateway)
+    august_gateway = MagicMock(spec=Gateway)
     august_gateway.async_refresh_access_token_if_needed = AsyncMock()
     august_gateway.async_get_access_token = AsyncMock()
     push = MagicMock(connected=False)
@@ -187,10 +187,10 @@ async def test_activity_stream_debounce_during_init(
 ) -> None:
     """Make sure requests during the initial sync get deferred."""
 
-    api = MagicMock(auto_spec=ApiAsync)
+    api = MagicMock(spec=ApiAsync)
     async_get_house_activities = AsyncMock()
     api.async_get_house_activities = async_get_house_activities
-    august_gateway = MagicMock(auto_spec=Gateway)
+    august_gateway = MagicMock(spec=Gateway)
     august_gateway.async_refresh_access_token_if_needed = AsyncMock()
     august_gateway.async_get_access_token = AsyncMock()
     push = MagicMock(connected=False)
@@ -408,7 +408,9 @@ async def test_update_house_id_skips_when_shutdown() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error", [AugustApiAIOHTTPError("boom"), ClientError("boom")])
-async def test_update_house_id_swallows_request_errors(error: Exception) -> None:
+async def test_update_house_id_swallows_request_errors(
+    error: AugustApiAIOHTTPError | ClientError,
+) -> None:
     """API errors are logged and processing continues without raising."""
     stream, _api, async_get = _build_stream()
     async_get.side_effect = error
