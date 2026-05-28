@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from _pytest.logging import LogCaptureFixture
 from aiohttp import ClientError, ClientResponseError
 
 from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
@@ -1292,7 +1293,7 @@ def _make_gateway(brand: Brand = Brand.AUGUST) -> Mock:
 
 
 @pytest.mark.asyncio
-async def test_async_setup_filters_inoperative_and_starts_initial_sync():
+async def test_async_setup_filters_inoperative_and_starts_initial_sync() -> None:
     """async_setup pulls locks/doorbells, removes those without details, then kicks
     off the initial sync.
     """
@@ -1307,7 +1308,7 @@ async def test_async_setup_filters_inoperative_and_starts_initial_sync():
 
     data = MockYaleXSData(gateway)
 
-    async def fake_refresh(device_ids):
+    async def fake_refresh(device_ids: list[str]) -> None:
         # only lockA gets details — lockB and doorbell drop off
         data._device_detail_by_id = {
             "lockA": Mock(
@@ -1342,7 +1343,7 @@ async def test_async_setup_filters_inoperative_and_starts_initial_sync():
 
 
 @pytest.mark.asyncio
-async def test_async_setup_yale_global_fetches_capabilities_and_skips_sync():
+async def test_async_setup_yale_global_fetches_capabilities_and_skips_sync() -> None:
     """YALE_GLOBAL brand: capability fetch runs, initial-sync task is not scheduled."""
     gateway = _make_gateway(Brand.YALE_GLOBAL)
     lock = Mock(device_id="L1", house_id="H1")
@@ -1352,7 +1353,7 @@ async def test_async_setup_yale_global_fetches_capabilities_and_skips_sync():
     data = MockYaleXSData(gateway)
     lock_detail = Mock(spec=LockDetail, bridge=Mock(hyper_bridge=True))
 
-    async def fake_refresh(device_ids):
+    async def fake_refresh(device_ids: list[str]) -> None:
         data._device_detail_by_id = {"L1": lock_detail}
 
     with (
@@ -1375,7 +1376,7 @@ async def test_async_setup_yale_global_fetches_capabilities_and_skips_sync():
 
 
 @pytest.mark.asyncio
-async def test_async_setup_activity_stream_yale_global_uses_socketio():
+async def test_async_setup_activity_stream_yale_global_uses_socketio() -> None:
     gateway = _make_gateway(Brand.YALE_GLOBAL)
     gateway.api.async_get_user = AsyncMock(return_value={"UserID": "user-1"})
     data = MockYaleXSData(gateway)
@@ -1405,7 +1406,9 @@ async def test_async_setup_activity_stream_yale_global_uses_socketio():
 
 
 @pytest.mark.asyncio
-async def test_async_setup_activity_stream_august_uses_pubnub_and_registers_devices():
+async def test_async_setup_activity_stream_august_uses_pubnub_and_registers_devices() -> (
+    None
+):
     gateway = _make_gateway(Brand.AUGUST)
     gateway.api.async_get_user = AsyncMock(return_value={"UserID": "u2"})
     data = MockYaleXSData(gateway)
@@ -1434,14 +1437,16 @@ async def test_async_setup_activity_stream_august_uses_pubnub_and_registers_devi
 
 
 @pytest.mark.asyncio
-async def test_async_initial_sync_logs_unexpected_but_swallows_known_errors(caplog):
+async def test_async_initial_sync_logs_unexpected_but_swallows_known_errors(
+    caplog: LogCaptureFixture,
+) -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     detail = Mock(bridge=Mock(hyper_bridge=False))
     data._device_detail_by_id = {"d1": detail, "d2": detail, "d3": detail}
     data._locks_by_id = {"d1": Mock(), "d2": Mock(), "d3": Mock()}
 
-    async def _status(device_id, hyper_bridge):
+    async def _status(device_id: str, hyper_bridge: bool) -> str:
         if device_id == "d1":
             raise TimeoutError("timeout-marker")
         if device_id == "d2":
@@ -1461,7 +1466,7 @@ async def test_async_initial_sync_logs_unexpected_but_swallows_known_errors(capl
 
 
 @pytest.mark.asyncio
-async def test_async_stop_cancels_initial_sync_and_invokes_push_unsub():
+async def test_async_stop_cancels_initial_sync_and_invokes_push_unsub() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
 
@@ -1469,7 +1474,7 @@ async def test_async_stop_cancels_initial_sync_and_invokes_push_unsub():
     activity_stream.async_stop = Mock()
     data.activity_stream = activity_stream
 
-    async def _never():
+    async def _never() -> None:
         await asyncio.sleep(10)
 
     data._initial_sync_task = asyncio.create_task(_never())
@@ -1485,7 +1490,7 @@ async def test_async_stop_cancels_initial_sync_and_invokes_push_unsub():
 
 
 @pytest.mark.asyncio
-async def test_properties_doorbells_locks_and_get_device_detail():
+async def test_properties_doorbells_locks_and_get_device_detail() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
 
@@ -1502,7 +1507,7 @@ async def test_properties_doorbells_locks_and_get_device_detail():
 
 
 @pytest.mark.asyncio
-async def test_async_refresh_returns_when_shutdown():
+async def test_async_refresh_returns_when_shutdown() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     data._shutdown = True
@@ -1514,7 +1519,7 @@ async def test_async_refresh_returns_when_shutdown():
 
 
 @pytest.mark.asyncio
-async def test_async_refresh_delegates_to_subscriptions():
+async def test_async_refresh_delegates_to_subscriptions() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     data._subscriptions["dev1"].add(lambda: None)
@@ -1531,13 +1536,15 @@ async def test_async_refresh_delegates_to_subscriptions():
 
 
 @pytest.mark.asyncio
-async def test_refresh_device_details_logs_and_continues_on_known_errors(caplog):
+async def test_refresh_device_details_logs_and_continues_on_known_errors(
+    caplog: LogCaptureFixture,
+) -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
 
     seen: list[str] = []
 
-    async def _per(device_id):
+    async def _per(device_id: str) -> None:
         seen.append(device_id)
         if device_id == "to":
             raise TimeoutError
@@ -1558,7 +1565,7 @@ async def test_refresh_device_details_logs_and_continues_on_known_errors(caplog)
 
 
 @pytest.mark.asyncio
-async def test_refresh_camera_by_id_calls_update_for_doorbell():
+async def test_refresh_camera_by_id_calls_update_for_doorbell() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     doorbell = Mock()
@@ -1572,7 +1579,7 @@ async def test_refresh_camera_by_id_calls_update_for_doorbell():
 
 
 @pytest.mark.asyncio
-async def test_push_updates_connected_reflects_stream_state():
+async def test_push_updates_connected_reflects_stream_state() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     assert data.push_updates_connected is False
@@ -1583,7 +1590,7 @@ async def test_push_updates_connected_reflects_stream_state():
 
 
 @pytest.mark.asyncio
-async def test_refresh_device_detail_by_id_short_circuits_on_shutdown():
+async def test_refresh_device_detail_by_id_short_circuits_on_shutdown() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     data._shutdown = True
@@ -1593,7 +1600,7 @@ async def test_refresh_device_detail_by_id_short_circuits_on_shutdown():
 
 
 @pytest.mark.asyncio
-async def test_refresh_device_detail_by_id_lock_path_restores_live_attrs():
+async def test_refresh_device_detail_by_id_lock_path_restores_live_attrs() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
 
@@ -1621,7 +1628,7 @@ async def test_refresh_device_detail_by_id_lock_path_restores_live_attrs():
     stream.push_updates_connected = True
     data.activity_stream = stream
 
-    async def _update(device, api_call):
+    async def _update(device: Any, api_call: Any) -> None:
         data._device_detail_by_id[lock_id] = new_detail
 
     signals: list[str] = []
@@ -1638,7 +1645,7 @@ async def test_refresh_device_detail_by_id_lock_path_restores_live_attrs():
 
 
 @pytest.mark.asyncio
-async def test_refresh_device_detail_by_id_lock_propagates_keypad_into_index():
+async def test_refresh_device_detail_by_id_lock_propagates_keypad_into_index() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     data._locks_by_id = {"L": Mock()}
@@ -1651,7 +1658,7 @@ async def test_refresh_device_detail_by_id_lock_propagates_keypad_into_index():
     new_detail.offline_key = None
     data._device_detail_by_id = {"L": Mock(spec=LockDetail)}
 
-    async def _update(device, api_call):
+    async def _update(device: Any, api_call: Any) -> None:
         data._device_detail_by_id["L"] = new_detail
 
     with (
@@ -1664,7 +1671,7 @@ async def test_refresh_device_detail_by_id_lock_propagates_keypad_into_index():
 
 
 @pytest.mark.asyncio
-async def test_refresh_device_detail_by_id_doorbell_branch():
+async def test_refresh_device_detail_by_id_doorbell_branch() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     doorbell = Mock()
@@ -1682,7 +1689,7 @@ async def test_refresh_device_detail_by_id_doorbell_branch():
 
 
 @pytest.mark.asyncio
-async def test_async_update_device_detail_happy_path_stores_detail():
+async def test_async_update_device_detail_happy_path_stores_detail() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
 
@@ -1698,7 +1705,7 @@ async def test_async_update_device_detail_happy_path_stores_detail():
 
 
 @pytest.mark.asyncio
-async def test_async_update_device_detail_invokes_offline_key_hook():
+async def test_async_update_device_detail_invokes_offline_key_hook() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     data.async_offline_key_discovered = Mock()
@@ -1714,7 +1721,9 @@ async def test_async_update_device_detail_invokes_offline_key_hook():
 
 
 @pytest.mark.asyncio
-async def test_async_update_device_detail_returns_early_on_client_error(caplog):
+async def test_async_update_device_detail_returns_early_on_client_error(
+    caplog: LogCaptureFixture,
+) -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     device = Mock(device_id="d", device_name="Front")
@@ -1729,7 +1738,7 @@ async def test_async_update_device_detail_returns_early_on_client_error(caplog):
 
 
 @pytest.mark.asyncio
-async def test_get_device_and_get_device_name_resolve_both_indexes():
+async def test_get_device_and_get_device_name_resolve_both_indexes() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
 
@@ -1759,8 +1768,11 @@ async def test_get_device_and_get_device_name_resolve_both_indexes():
 )
 @pytest.mark.asyncio
 async def test_simple_lock_operations_delegate_to_api(
-    method_name, api_attr, args, returns_activities
-):
+    method_name: str,
+    api_attr: str,
+    args: tuple[Any, ...],
+    returns_activities: bool,
+) -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     sentinel = ["activity"] if returns_activities else "request-id"
@@ -1774,7 +1786,7 @@ async def test_simple_lock_operations_delegate_to_api(
 
 
 @pytest.mark.asyncio
-async def test_status_async_wraps_underlying_call_with_rate_limit():
+async def test_status_async_wraps_underlying_call_with_rate_limit() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     gateway.api.async_status_async = AsyncMock(return_value="rid")
@@ -1795,12 +1807,12 @@ async def test_status_async_wraps_underlying_call_with_rate_limit():
 
 
 @pytest.mark.asyncio
-async def test_async_call_api_op_wraps_aiohttp_errors_with_device_name():
+async def test_async_call_api_op_wraps_aiohttp_errors_with_device_name() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     data._locks_by_id = {"L": Mock(device_name="Front Door")}
 
-    async def boom(*_, **__):
+    async def boom(*_: Any, **__: Any) -> None:
         raise AugustApiAIOHTTPError("nope")
 
     with pytest.raises(Exception) as exc_info:
@@ -1809,11 +1821,11 @@ async def test_async_call_api_op_wraps_aiohttp_errors_with_device_name():
 
 
 @pytest.mark.asyncio
-async def test_async_call_api_op_falls_back_to_device_id_when_unknown():
+async def test_async_call_api_op_falls_back_to_device_id_when_unknown() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
 
-    async def boom(*_, **__):
+    async def boom(*_: Any, **__: Any) -> None:
         raise AugustApiAIOHTTPError("nope")
 
     with pytest.raises(Exception) as exc_info:
@@ -1822,7 +1834,7 @@ async def test_async_call_api_op_falls_back_to_device_id_when_unknown():
 
 
 @pytest.mark.asyncio
-async def test_async_get_doorbell_image_happy_path():
+async def test_async_get_doorbell_image_happy_path() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     doorbell = Mock()
@@ -1837,7 +1849,7 @@ async def test_async_get_doorbell_image_happy_path():
 
 
 @pytest.mark.asyncio
-async def test_async_get_doorbell_image_retries_on_token_expired_for_yale():
+async def test_async_get_doorbell_image_retries_on_token_expired_for_yale() -> None:
     """Yale brands refresh the content token and retry once."""
     gateway = _make_gateway(Brand.YALE_HOME)
     data = MockYaleXSData(gateway)
@@ -1848,7 +1860,7 @@ async def test_async_get_doorbell_image_retries_on_token_expired_for_yale():
 
     data._device_detail_by_id = {"d": first}
 
-    async def _refresh(device_id):
+    async def _refresh(device_id: str) -> None:
         data._device_detail_by_id[device_id] = refreshed
 
     with patch.object(data, "refresh_camera_by_id", side_effect=_refresh) as ref:
@@ -1859,7 +1871,7 @@ async def test_async_get_doorbell_image_retries_on_token_expired_for_yale():
 
 
 @pytest.mark.asyncio
-async def test_async_get_doorbell_image_reraises_for_non_yale_brand():
+async def test_async_get_doorbell_image_reraises_for_non_yale_brand() -> None:
     gateway = _make_gateway(Brand.AUGUST)
     data = MockYaleXSData(gateway)
     doorbell = Mock()
@@ -1871,7 +1883,9 @@ async def test_async_get_doorbell_image_reraises_for_non_yale_brand():
 
 
 @pytest.mark.asyncio
-async def test_remove_inoperative_doorbells_drops_those_without_details(caplog):
+async def test_remove_inoperative_doorbells_drops_those_without_details(
+    caplog: LogCaptureFixture,
+) -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
     bell_ok = Mock(device_id="ok", device_name="Front Bell")
@@ -1888,7 +1902,9 @@ async def test_remove_inoperative_doorbells_drops_those_without_details(caplog):
 
 
 @pytest.mark.asyncio
-async def test_remove_inoperative_locks_keeps_ones_with_bridge_drops_others(caplog):
+async def test_remove_inoperative_locks_keeps_ones_with_bridge_drops_others(
+    caplog: LogCaptureFixture,
+) -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
 
@@ -1920,7 +1936,9 @@ async def test_remove_inoperative_locks_keeps_ones_with_bridge_drops_others(capl
 
 
 @pytest.mark.asyncio
-async def test_async_push_message_catches_unexpected_exceptions(caplog):
+async def test_async_push_message_catches_unexpected_exceptions(
+    caplog: LogCaptureFixture,
+) -> None:
     """Any exception bubbling out of _async_handle_push_message is swallowed and
     logged at ERROR with a traceback so a single bad message can't kill the
     push loop.
@@ -1942,7 +1960,7 @@ async def test_async_push_message_catches_unexpected_exceptions(caplog):
 
 
 @pytest.mark.asyncio
-async def test_async_stop_is_safe_when_nothing_was_initialized():
+async def test_async_stop_is_safe_when_nothing_was_initialized() -> None:
     """async_stop must tolerate having no activity_stream, no initial-sync task,
     and no push_unsub — i.e. cleanup called before setup completed.
     """
@@ -1954,7 +1972,7 @@ async def test_async_stop_is_safe_when_nothing_was_initialized():
 
 
 @pytest.mark.asyncio
-async def test_async_handle_push_message_status_only_short_circuits():
+async def test_async_handle_push_message_status_only_short_circuits() -> None:
     """When the device produces only is_status activities and state is unchanged,
     the for-loop body must be entered but exit via the early `return` (line 302)
     without scheduling any house refresh.
@@ -1994,7 +2012,9 @@ async def test_async_handle_push_message_status_only_short_circuits():
 
 
 @pytest.mark.asyncio
-async def test_handle_push_message_logs_and_skips_status_activities_when_state_changed():
+async def test_handle_push_message_logs_and_skips_status_activities_when_state_changed() -> (
+    None
+):
     """When the message represents a real (changed) state but the activities list
     contains a status update, that status entry is logged and `continue`d past
     while only non-status activities trigger a house refresh.
@@ -2029,30 +2049,33 @@ async def test_handle_push_message_logs_and_skips_status_activities_when_state_c
     stream.async_schedule_house_id_refresh.assert_called_once_with("h")
 
 
-class TestIsUnchangedPushStateEarlyReturns:
-    """Cover the early-return branches in _is_unchanged_push_state."""
+def _make_bare_push_state_holder() -> Any:
+    """Build a minimal object bound to YaleXSData._is_unchanged_push_state."""
 
-    def setup_method(self):
-        class _D:
-            _is_unchanged_push_state = YaleXSData._is_unchanged_push_state
+    class _D:
+        _is_unchanged_push_state = YaleXSData._is_unchanged_push_state
 
-            def __init__(self) -> None:
-                self._last_push_state: dict = {}
+        def __init__(self) -> None:
+            self._last_push_state: dict[str, Any] = {}
 
-        self.data = _D()
+    return _D()
 
-    def test_websocket_message_without_relevant_fields_is_processed(self):
-        assert (
-            self.data._is_unchanged_push_state(
-                "d", {"unrelated": "x"}, SOURCE_WEBSOCKET, []
-            )
-            is False
+
+def test_is_unchanged_push_state_websocket_without_relevant_fields_is_processed() -> (
+    None
+):
+    data = _make_bare_push_state_holder()
+    assert (
+        data._is_unchanged_push_state(
+            "d", {"unrelated": "x"}, SOURCE_WEBSOCKET, []
         )
+        is False
+    )
 
-    def test_pubnub_message_without_relevant_fields_is_processed(self):
-        assert (
-            self.data._is_unchanged_push_state(
-                "d", {"unrelated": "x"}, SOURCE_PUBNUB, []
-            )
-            is False
-        )
+
+def test_is_unchanged_push_state_pubnub_without_relevant_fields_is_processed() -> None:
+    data = _make_bare_push_state_holder()
+    assert (
+        data._is_unchanged_push_state("d", {"unrelated": "x"}, SOURCE_PUBNUB, [])
+        is False
+    )
