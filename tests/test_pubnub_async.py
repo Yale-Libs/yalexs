@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pubnub.enums import PNStatusCategory
+from pubnub.enums import PNReconnectionPolicy, PNStatusCategory
 
+from yalexs.const import BRAND_CONFIG, Brand
 from yalexs.pubnub_async import AugustPubNub
 
 
@@ -182,3 +183,98 @@ def test_channels_property_reflects_registration():
     pn.register_device(_make_device("ch-a", "A"))
     pn.register_device(_make_device("ch-b", "B"))
     assert set(pn.channels) == {"ch-a", "ch-b"}
+
+
+def test_status_unhandled_category_is_noop():
+    """Categories outside the handled set must not flip state or reconnect."""
+    pn = AugustPubNub()
+    pn.connected = True  # sentinel: should stay True
+    pubnub = MagicMock()
+
+    pn.status(pubnub, _make_status(PNStatusCategory.PNAcknowledgmentCategory))
+
+    assert pn.connected is True
+    pubnub.reconnect.assert_not_called()
+
+
+def _build_fake_pubnub() -> MagicMock:
+    """Pubnub stand-in that records add_listener/subscribe/remove_listener/stop."""
+    fake = MagicMock(name="PubNubAsyncio")
+    sub_obj = MagicMock(name="subscribe")
+    channels_obj = MagicMock(name="channels")
+    fake.subscribe.return_value = sub_obj
+    sub_obj.channels.return_value = channels_obj
+    fake.stop = AsyncMock()
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_run_configures_pubnub_and_subscribes_channels():
+    pn = AugustPubNub()
+    pn.register_device(_make_device("ch-1", "DEV1"))
+    pn.register_device(_make_device("ch-2", "DEV2"))
+
+    fake_pubnub = _build_fake_pubnub()
+    captured_config = {}
+
+    def fake_pubnub_factory(pnconfig):
+        captured_config["pnconfig"] = pnconfig
+        return fake_pubnub
+
+    with patch("yalexs.pubnub_async.PubNubAsyncio", side_effect=fake_pubnub_factory):
+        unsub = await pn.run("abc-123", brand=Brand.AUGUST)
+
+    pnconfig = captured_config["pnconfig"]
+    brand_config = BRAND_CONFIG[Brand.AUGUST]
+    assert pnconfig.subscribe_key == brand_config.pubnub_subscribe_token
+    assert pnconfig.publish_key == brand_config.pubnub_publish_token
+    assert pnconfig.uuid == "pn-ABC-123"
+    assert pnconfig.reconnect_policy == PNReconnectionPolicy.EXPONENTIAL
+
+    fake_pubnub.add_listener.assert_called_once_with(pn)
+    fake_pubnub.subscribe.assert_called_once_with()
+    fake_pubnub.subscribe.return_value.channels.assert_called_once()
+    # Channels passed must match the registered channels (order-independent)
+    channels_arg = fake_pubnub.subscribe.return_value.channels.call_args.args[0]
+    assert set(channels_arg) == {"ch-1", "ch-2"}
+    fake_pubnub.subscribe.return_value.channels.return_value.execute.assert_called_once_with()
+
+    assert callable(unsub)
+
+
+@pytest.mark.asyncio
+async def test_run_returned_unsub_tears_down_pubnub():
+    pn = AugustPubNub()
+    pn.register_device(_make_device("ch-1", "DEV1"))
+
+    fake_pubnub = _build_fake_pubnub()
+
+    with patch("yalexs.pubnub_async.PubNubAsyncio", return_value=fake_pubnub):
+        unsub = await pn.run("uid", brand=Brand.AUGUST)
+
+    fake_pubnub.remove_listener.assert_not_called()
+    fake_pubnub.unsubscribe_all.assert_not_called()
+    fake_pubnub.stop.assert_not_awaited()
+
+    await unsub()
+
+    fake_pubnub.remove_listener.assert_called_once_with(pn)
+    fake_pubnub.unsubscribe_all.assert_called_once_with()
+    fake_pubnub.stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_run_defaults_to_august_brand():
+    pn = AugustPubNub()
+    fake_pubnub = _build_fake_pubnub()
+    captured = {}
+
+    def factory(pnconfig):
+        captured["pnconfig"] = pnconfig
+        return fake_pubnub
+
+    with patch("yalexs.pubnub_async.PubNubAsyncio", side_effect=factory):
+        await pn.run("uuid-only")
+
+    brand_config = BRAND_CONFIG[Brand.AUGUST]
+    assert captured["pnconfig"].subscribe_key == brand_config.pubnub_subscribe_token
