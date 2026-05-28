@@ -341,9 +341,7 @@ async def test_setup_authentication_loads_valid_cache(cache_path: str) -> None:
     async with ClientSession() as session:
         authenticator = _make_authenticator(session, cache_path)
         await authenticator.async_setup_authentication()
-        assert (
-            authenticator._authentication.state == AuthenticationState.AUTHENTICATED
-        )
+        assert authenticator._authentication.state == AuthenticationState.AUTHENTICATED
         assert authenticator._authentication.access_token == "cached_token"
         assert authenticator._authentication.install_id == "cached_install"
 
@@ -380,9 +378,7 @@ async def test_setup_authentication_with_soon_expiring_cache_warns(
             and "going to expire" in r.getMessage()
             for r in caplog.records
         ), f"expected expiry warning, got: {caplog.records}"
-        assert (
-            authenticator._authentication.state == AuthenticationState.AUTHENTICATED
-        )
+        assert authenticator._authentication.state == AuthenticationState.AUTHENTICATED
 
 
 @pytest.mark.asyncio
