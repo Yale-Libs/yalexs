@@ -358,9 +358,9 @@ class TestAuthenticatorAsyncCache(unittest.IsolatedAsyncioTestCase):
     @aioresponses()
     async def test_authenticate_writes_cache_file(self, mock_aioresponses):
         # Round-trip: a successful authenticate() should persist to disk.
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(days=30)
-        ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + "Z"
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )[:-3] + "Z"
         mock_aioresponses.post(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
             headers={"x-august-access-token": "fresh_token"},
@@ -411,9 +411,9 @@ class TestAuthenticatorAsyncCache(unittest.IsolatedAsyncioTestCase):
     async def test_refresh_no_op_when_refresh_not_needed(self, mock_aioresponses):
         # Authenticate with a far-future expiration, then refresh(force=False)
         # should short-circuit without calling the API.
-        far_future = (
-            datetime.now(timezone.utc) + timedelta(days=30)
-        ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + "Z"
+        far_future = (datetime.now(timezone.utc) + timedelta(days=30)).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )[:-3] + "Z"
         mock_aioresponses.post(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_SESSION_URL),
             headers={"x-august-access-token": "fresh_token"},

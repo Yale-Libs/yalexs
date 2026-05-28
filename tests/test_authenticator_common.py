@@ -88,9 +88,7 @@ class TestAuthenticatorCommon(unittest.TestCase):
             AuthenticationState.AUTHENTICATED,
             install_id="iid",
             access_token="old_token",
-            access_token_expires=_fmt(
-                datetime.now(timezone.utc) + timedelta(days=30)
-            ),
+            access_token_expires=_fmt(datetime.now(timezone.utc) + timedelta(days=30)),
         )
         return common
 
@@ -154,17 +152,13 @@ class TestAuthenticatorCommon(unittest.TestCase):
 
     def test_process_refreshed_access_token_with_exp(self):
         common = self._build()
-        exp = int(
-            (datetime.now(timezone.utc) + timedelta(days=14)).timestamp()
-        )
+        exp = int((datetime.now(timezone.utc) + timedelta(days=14)).timestamp())
         token = jwt.encode({"exp": exp}, "secret", algorithm="HS256")
         result = common._process_refreshed_access_token(token)
         self.assertEqual(token, result.access_token)
         # Stored as ISO format with trailing Z; parsed_expiration_time should
         # round-trip back to the same UTC timestamp.
-        self.assertEqual(
-            exp, int(result.parsed_expiration_time().timestamp())
-        )
+        self.assertEqual(exp, int(result.parsed_expiration_time().timestamp()))
 
     def test_process_refreshed_access_token_missing_exp_warns(self):
         common = self._build()
