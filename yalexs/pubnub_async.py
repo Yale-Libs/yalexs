@@ -64,7 +64,7 @@ class AugustPubNub(SubscribeCallback):
 
         elif status.category == PNStatusCategory.PNReconnectedCategory:
             self.connected = True
-            now = datetime.datetime.now(datetime.UTC)
+            now = datetime.datetime.now(datetime.timezone.utc)
             # Callback with an empty message to force a refresh
             for callback in self._subscriptions:
                 for device_id in self._device_channels.values():
@@ -79,7 +79,14 @@ class AugustPubNub(SubscribeCallback):
         message: PNMessageResult,
     ) -> None:
         # Handle new messages
-        device_id = self._device_channels[message.channel]
+        device_id = self._device_channels.get(message.channel)
+        if device_id is None:
+            _LOGGER.debug(
+                "Dropping pubnub message on unknown channel %s: %s",
+                message.channel,
+                message.message,
+            )
+            return
         _LOGGER.debug(
             "Received new messages on channel %s for device_id: %s with timetoken: %s: %s",
             message.channel,
