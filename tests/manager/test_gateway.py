@@ -54,7 +54,9 @@ def _response_error(status: int) -> ClientResponseError:
 
 
 def _august_api_error(status: int | None) -> AugustApiAIOHTTPError:
-    client_error = _response_error(status) if status is not None else ClientError("nope")
+    client_error = (
+        _response_error(status) if status is not None else ClientError("nope")
+    )
     return AugustApiAIOHTTPError("msg", aiohttp_client_error=client_error)
 
 
@@ -87,7 +89,9 @@ async def test_configure_access_token_cache_file_uses_override(
 ) -> None:
     gw = Gateway(tmp_path, session)
 
-    result = gw.async_configure_access_token_cache_file("user@example.com", "custom.cache")
+    result = gw.async_configure_access_token_cache_file(
+        "user@example.com", "custom.cache"
+    )
 
     assert result == tmp_path / "custom.cache"
     assert gw._access_token_cache_file == "custom.cache"
