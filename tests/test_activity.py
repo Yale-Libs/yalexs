@@ -61,15 +61,21 @@ from yalexs.activity import (
     ACTIVITY_ACTIONS_DOORBELL_VIEW,
     ACTIVITY_ACTIONS_LOCK_OPERATION,
     SOURCE_LOG,
+    SOURCE_PUBNUB,
     SOURCE_WEBSOCKET,
+    Activity,
     ActivityType,
     DoorbellDingActivity,
+    DoorbellImageCaptureActivity,
+    DoorbellMotionActivity,
+    DoorbellViewActivity,
     LockOperationActivity,
 )
 from yalexs.api_async import ApiAsync
 from yalexs.api_common import API_GET_LOCK_URL, ApiCommon
 from yalexs.const import DEFAULT_BRAND
 from yalexs.lock import LockDoorStatus, LockStatus
+from yalexs.time import epoch_to_datetime
 
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
 
@@ -611,3 +617,137 @@ class TestActivityApiAsync(unittest.IsolatedAsyncioTestCase):
             keypad_lock_activity.operator_thumbnail_url
             == "https://d33mytkkohwnk6.cloudfront.net/app/ActivityFeedIcons/pin_lock@3x.png"
         )
+
+    def test_activity_without_entities_returns_none_ids(self):
+        # Activity with no "entities" key — _entities default ({}) is exercised,
+        # activity_id and house_id both return None.
+        activity = Activity(SOURCE_LOG, {"dateTime": 1700000000000})
+        assert activity.activity_id is None
+        assert activity.house_id is None
+
+    def test_is_status_explicit_action_status(self):
+        # action == "status" short-circuits to True.
+        activity = Activity(
+            SOURCE_PUBNUB,
+            {"dateTime": 1700000000000, "action": "status", "info": {"some": "data"}},
+        )
+        assert activity.is_status is True
+
+    def test_is_status_manual_user_id_is_not_status(self):
+        # UserID starting with "manual" forces is_status to False even when
+        # info is empty (which would otherwise default to status).
+        activity = Activity(
+            SOURCE_PUBNUB,
+            {
+                "dateTime": 1700000000000,
+                "callingUser": {"UserID": "manual123"},
+            },
+        )
+        assert activity.is_status is False
+
+
+class TestDoorbellActivities(unittest.TestCase):
+    def test_motion_activity_image_created_at_fallback(self):
+        # Image dict without "created_at" → falls back to activity_start_time.
+        activity = DoorbellMotionActivity(
+            SOURCE_PUBNUB,
+            {
+                "dateTime": 1700000000000,
+                "info": {"image": {"secure_url": "https://img"}},
+            },
+        )
+        assert activity.image_created_at_datetime == activity.activity_start_time
+
+    def test_motion_activity_image_created_at_none_when_no_image(self):
+        activity = DoorbellMotionActivity(
+            SOURCE_PUBNUB,
+            {"dateTime": 1700000000000, "info": {}},
+        )
+        assert activity.image_created_at_datetime is None
+
+    def test_image_capture_activity_is_distinct_class(self):
+        activity = DoorbellImageCaptureActivity(
+            SOURCE_PUBNUB,
+            {
+                "dateTime": 1700000000000,
+                "info": {"image": {"secure_url": "https://capture"}},
+            },
+        )
+        assert activity.activity_type == ActivityType.DOORBELL_IMAGE_CAPTURE
+        assert activity.image_url == "https://capture"
+
+    def test_doorbell_ding_activity_image_url_from_info(self):
+        # DoorbellBaseActionActivity.image_url reads from _info["image"] (or "attachment").
+        activity = DoorbellDingActivity(
+            SOURCE_PUBNUB,
+            {
+                "dateTime": 1700000000000,
+                "info": {"image": "https://ding-image"},
+            },
+        )
+        assert activity.image_url == "https://ding-image"
+
+    def test_doorbell_ding_activity_image_url_from_attachment(self):
+        activity = DoorbellDingActivity(
+            SOURCE_PUBNUB,
+            {
+                "dateTime": 1700000000000,
+                "info": {"attachment": "https://ding-attach"},
+            },
+        )
+        assert activity.image_url == "https://ding-attach"
+
+    def test_doorbell_ding_activity_start_and_end_from_info(self):
+        # Both "started" and "ended" present → both branches taken.
+        activity = DoorbellDingActivity(
+            SOURCE_PUBNUB,
+            {
+                "dateTime": 1000,
+                "info": {"started": 2000000, "ended": 3000000},
+            },
+        )
+        assert activity.activity_start_time == epoch_to_datetime(2000000)
+        assert activity.activity_end_time == epoch_to_datetime(3000000)
+
+    def test_doorbell_view_activity_end_time_falls_back(self):
+        # No "ended" in info → super().activity_start_time fallback.
+        activity = DoorbellViewActivity(
+            SOURCE_PUBNUB,
+            {"dateTime": 1700000000000, "info": {"started": 1700000000000}},
+        )
+        assert activity.activity_end_time == activity.activity_start_time
+
+
+class TestLockOperationOperatorImage(unittest.TestCase):
+    def test_operator_image_url_string_original(self):
+        # type(original) is str → operator_image_url = original directly.
+        activity = LockOperationActivity(
+            SOURCE_PUBNUB,
+            {
+                "dateTime": 1700000000000,
+                "callingUser": {
+                    "FirstName": "First",
+                    "LastName": "Last",
+                    "imageInfo": {"original": "https://orig-direct"},
+                },
+            },
+        )
+        # With only original set (no thumbnail), thumbnail is filled from image.
+        assert activity.operator_image_url == "https://orig-direct"
+        assert activity.operator_thumbnail_url == "https://orig-direct"
+
+    def test_operator_thumbnail_filled_from_image_url(self):
+        # original is a dict (with secure_url), no thumbnail → thumbnail = image.
+        activity = LockOperationActivity(
+            SOURCE_PUBNUB,
+            {
+                "dateTime": 1700000000000,
+                "callingUser": {
+                    "FirstName": "First",
+                    "LastName": "Last",
+                    "imageInfo": {"original": {"secure_url": "https://from-dict"}},
+                },
+            },
+        )
+        assert activity.operator_image_url == "https://from-dict"
+        assert activity.operator_thumbnail_url == "https://from-dict"
