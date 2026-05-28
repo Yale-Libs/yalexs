@@ -149,9 +149,7 @@ class TestAlarmDevice:
         assert dev.battery_level == 100
 
     def test_battery_level_low(self) -> None:
-        dev = AlarmDevice(
-            _alarm_device_data(status_overrides={"lowBattery": True})
-        )
+        dev = AlarmDevice(_alarm_device_data(status_overrides={"lowBattery": True}))
         assert dev.battery_level == 10
 
     def test_battery_level_missing_low_battery_key(self) -> None:
