@@ -440,6 +440,7 @@ class YaleXSData(SubscriberMixin):
                 device_name,
                 ex,
             )
+            return
         _LOGGER.debug("Completed retrieving detail for %s (%s)", device_name, device_id)
         # If the key changes after startup we need to trigger a
         # discovery to keep it up to date

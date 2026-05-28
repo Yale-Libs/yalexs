@@ -1,5 +1,6 @@
 """Test the manager data module."""
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -11,9 +12,11 @@ from aiohttp import ClientError, ClientResponseError
 from yalexs.activity import SOURCE_PUBNUB, SOURCE_WEBSOCKET
 from yalexs.capabilities import CapabilitiesResponse
 from yalexs.const import Brand
-from yalexs.exceptions import YaleApiError
+from yalexs.doorbell import ContentTokenExpired
+from yalexs.exceptions import AugustApiAIOHTTPError, YaleApiError
 from yalexs.lock import LockDetail, LockOperation
 from yalexs.manager.data import YaleXSData
+from yalexs.manager.exceptions import CannotConnect
 
 
 class MockYaleXSData(YaleXSData):
@@ -1271,3 +1274,771 @@ async def test_async_operate_lock_no_device_detail() -> None:
     assert result == ["unlock_activity"]
     data.async_unlock.assert_called_once_with(device_id)
     data.async_unlatch.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Coverage for setup, refresh, lifecycle, doorbell image, and inoperative
+# device removal paths in YaleXSData.
+# ---------------------------------------------------------------------------
+
+
+def _make_gateway(brand: Brand = Brand.AUGUST) -> Mock:
+    """Build a Mock gateway whose .api is itself a Mock with brand attribute."""
+    gateway = Mock()
+    gateway.async_get_access_token = AsyncMock(return_value="token")
+    gateway.api = Mock()
+    gateway.api.brand = brand
+    return gateway
+
+
+@pytest.mark.asyncio
+async def test_async_setup_filters_inoperative_and_starts_initial_sync():
+    """async_setup pulls locks/doorbells, removes those without details, then kicks
+    off the initial sync.
+    """
+    gateway = _make_gateway(Brand.AUGUST)
+
+    lock_a = Mock(device_id="lockA", house_id="houseA")
+    lock_b = Mock(device_id="lockB", house_id="houseA")
+    doorbell = Mock(device_id="bellA", house_id="houseA")
+
+    gateway.api.async_get_operable_locks = AsyncMock(return_value=[lock_a, lock_b])
+    gateway.api.async_get_doorbells = AsyncMock(return_value=[doorbell])
+
+    data = MockYaleXSData(gateway)
+
+    async def fake_refresh(device_ids):
+        # only lockA gets details — lockB and doorbell drop off
+        data._device_detail_by_id = {
+            "lockA": Mock(spec=LockDetail, bridge=Mock(hyper_bridge=False), keypad=None),
+        }
+
+    with (
+        patch.object(data, "_async_refresh_device_detail_by_ids", side_effect=fake_refresh),
+        patch.object(data, "async_setup_activity_stream", new=AsyncMock()),
+        patch("yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()),
+        patch("yalexs.manager.data._RateLimitChecker.register_wakeup", new=AsyncMock()),
+        patch.object(
+            data, "_async_status_async", new=AsyncMock(return_value="ok")
+        ) as status_call,
+    ):
+        await data.async_setup()
+        # Yield once so the initial-sync eager task can run to completion.
+        await asyncio.sleep(0)
+
+    assert "lockA" in data._locks_by_id
+    assert "lockB" not in data._locks_by_id
+    assert "bellA" not in data._doorbells_by_id
+    assert data._house_ids == {"houseA"}
+    # _initial_sync_task should have been scheduled and run.
+    assert data._initial_sync_task is not None
+    status_call.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_async_setup_yale_global_fetches_capabilities_and_skips_sync():
+    """YALE_GLOBAL brand: capability fetch runs, initial-sync task is not scheduled."""
+    gateway = _make_gateway(Brand.YALE_GLOBAL)
+    lock = Mock(device_id="L1", house_id="H1")
+    gateway.api.async_get_operable_locks = AsyncMock(return_value=[lock])
+    gateway.api.async_get_doorbells = AsyncMock(return_value=[])
+
+    data = MockYaleXSData(gateway)
+    lock_detail = Mock(spec=LockDetail, bridge=Mock(hyper_bridge=True))
+
+    async def fake_refresh(device_ids):
+        data._device_detail_by_id = {"L1": lock_detail}
+
+    with (
+        patch.object(data, "_async_refresh_device_detail_by_ids", side_effect=fake_refresh),
+        patch.object(data, "async_setup_activity_stream", new=AsyncMock()),
+        patch.object(data, "_async_fetch_lock_capabilities", new=AsyncMock()) as fetch_caps,
+        patch("yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()),
+        patch("yalexs.manager.data._RateLimitChecker.register_wakeup", new=AsyncMock()),
+    ):
+        await data.async_setup()
+
+    fetch_caps.assert_awaited_once()
+    assert data._initial_sync_task is None
+
+
+@pytest.mark.asyncio
+async def test_async_setup_activity_stream_yale_global_uses_socketio():
+    gateway = _make_gateway(Brand.YALE_GLOBAL)
+    gateway.api.async_get_user = AsyncMock(return_value={"UserID": "user-1"})
+    data = MockYaleXSData(gateway)
+    data._device_detail_by_id = {}
+
+    unsub = AsyncMock()
+    fake_runner = Mock()
+    fake_runner.subscribe = Mock()
+    fake_runner.run = AsyncMock(return_value=unsub)
+
+    fake_stream = Mock()
+    fake_stream.async_setup = AsyncMock()
+
+    with (
+        patch("yalexs.manager.data.SocketIORunner", return_value=fake_runner) as sio_cls,
+        patch("yalexs.manager.data.ActivityStream", return_value=fake_stream),
+    ):
+        await data.async_setup_activity_stream()
+
+    sio_cls.assert_called_once_with(gateway)
+    fake_runner.subscribe.assert_called_once()
+    fake_runner.run.assert_awaited_once_with("user-1", Brand.YALE_GLOBAL)
+    assert data._push_unsub is unsub
+    assert data.activity_stream is fake_stream
+
+
+@pytest.mark.asyncio
+async def test_async_setup_activity_stream_august_uses_pubnub_and_registers_devices():
+    gateway = _make_gateway(Brand.AUGUST)
+    gateway.api.async_get_user = AsyncMock(return_value={"UserID": "u2"})
+    data = MockYaleXSData(gateway)
+    dev1 = Mock()
+    dev2 = Mock()
+    data._device_detail_by_id = {"a": dev1, "b": dev2}
+
+    unsub = AsyncMock()
+    fake_pubnub = Mock()
+    fake_pubnub.register_device = Mock()
+    fake_pubnub.subscribe = Mock()
+    fake_pubnub.run = AsyncMock(return_value=unsub)
+
+    fake_stream = Mock()
+    fake_stream.async_setup = AsyncMock()
+
+    with (
+        patch("yalexs.manager.data.AugustPubNub", return_value=fake_pubnub),
+        patch("yalexs.manager.data.ActivityStream", return_value=fake_stream),
+    ):
+        await data.async_setup_activity_stream()
+
+    assert fake_pubnub.register_device.call_count == 2
+    fake_pubnub.run.assert_awaited_once_with("u2", Brand.AUGUST)
+    assert data._push_unsub is unsub
+
+
+@pytest.mark.asyncio
+async def test_async_initial_sync_logs_unexpected_but_swallows_known_errors(caplog):
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    detail = Mock(bridge=Mock(hyper_bridge=False))
+    data._device_detail_by_id = {"d1": detail, "d2": detail, "d3": detail}
+    data._locks_by_id = {"d1": Mock(), "d2": Mock(), "d3": Mock()}
+
+    async def _status(device_id, hyper_bridge):
+        if device_id == "d1":
+            raise TimeoutError("timeout-marker")
+        if device_id == "d2":
+            return "ok"
+        raise RuntimeError("boom")
+
+    with (
+        patch.object(data, "_async_status_async", side_effect=_status),
+        caplog.at_level(logging.WARNING),
+    ):
+        await data._async_initial_sync()
+
+    assert "Unexpected exception during initial sync" in caplog.text
+    assert "boom" in caplog.text
+    # The known TimeoutError must NOT have triggered a warning of its own.
+    assert "timeout-marker" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_async_stop_cancels_initial_sync_and_invokes_push_unsub():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    activity_stream = Mock()
+    activity_stream.async_stop = Mock()
+    data.activity_stream = activity_stream
+
+    async def _never():
+        await asyncio.sleep(10)
+
+    data._initial_sync_task = asyncio.create_task(_never())
+    push_unsub = AsyncMock()
+    data._push_unsub = push_unsub
+
+    await data.async_stop()
+
+    assert data._shutdown is True
+    activity_stream.async_stop.assert_called_once()
+    assert data._initial_sync_task.cancelled()
+    push_unsub.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_properties_doorbells_locks_and_get_device_detail():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    door = Mock()
+    lock = Mock()
+    detail = Mock()
+    data._doorbells_by_id = {"d": door}
+    data._locks_by_id = {"l": lock}
+    data._device_detail_by_id = {"l": detail}
+
+    assert list(data.doorbells) == [door]
+    assert list(data.locks) == [lock]
+    assert data.get_device_detail("l") is detail
+
+
+@pytest.mark.asyncio
+async def test_async_refresh_returns_when_shutdown():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    data._shutdown = True
+    with patch.object(
+        data, "_async_refresh_device_detail_by_ids", new=AsyncMock()
+    ) as inner:
+        await data._async_refresh()
+    inner.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_refresh_delegates_to_subscriptions():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    data._subscriptions["dev1"].add(lambda: None)
+    data._subscriptions["dev2"].add(lambda: None)
+
+    with patch.object(
+        data, "_async_refresh_device_detail_by_ids", new=AsyncMock()
+    ) as inner:
+        await data._async_refresh()
+
+    inner.assert_awaited_once()
+    arg = inner.await_args.args[0]
+    assert set(arg) == {"dev1", "dev2"}
+
+
+@pytest.mark.asyncio
+async def test_refresh_device_details_logs_and_continues_on_known_errors(caplog):
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    seen: list[str] = []
+
+    async def _per(device_id):
+        seen.append(device_id)
+        if device_id == "to":
+            raise TimeoutError
+        if device_id == "client":
+            raise ClientResponseError(Mock(), (), status=500, message="boom")
+        if device_id == "conn":
+            raise CannotConnect
+
+    with (
+        patch.object(data, "_async_refresh_device_detail_by_id", side_effect=_per),
+        caplog.at_level(logging.WARNING),
+    ):
+        await data._async_refresh_device_detail_by_ids(["to", "client", "conn", "ok"])
+
+    assert seen == ["to", "client", "conn", "ok"]
+    assert "Timed out" in caplog.text
+    assert "Error from august api during refresh of device" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_refresh_camera_by_id_calls_update_for_doorbell():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    doorbell = Mock()
+    data._doorbells_by_id = {"bell": doorbell}
+    gateway.api.async_get_doorbell_detail = AsyncMock()
+
+    with patch.object(data, "_async_update_device_detail", new=AsyncMock()) as inner:
+        await data.refresh_camera_by_id("bell")
+
+    inner.assert_awaited_once_with(doorbell, gateway.api.async_get_doorbell_detail)
+
+
+@pytest.mark.asyncio
+async def test_push_updates_connected_reflects_stream_state():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    assert data.push_updates_connected is False
+    stream = Mock()
+    stream.push_updates_connected = True
+    data.activity_stream = stream
+    assert data.push_updates_connected is True
+
+
+@pytest.mark.asyncio
+async def test_refresh_device_detail_by_id_short_circuits_on_shutdown():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    data._shutdown = True
+    with patch.object(
+        data, "_async_update_device_detail", new=AsyncMock()
+    ) as inner:
+        await data._async_refresh_device_detail_by_id("dev")
+    inner.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_refresh_device_detail_by_id_lock_path_restores_live_attrs():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    lock_id = "L1"
+    lock_obj = Mock()
+    data._locks_by_id = {lock_id: lock_obj}
+
+    lock_detail = Mock(spec=LockDetail)
+    lock_detail.door_state = "open"
+    lock_detail.door_state_datetime = "dt1"
+    lock_detail.lock_status = "locked"
+    lock_detail.lock_status_datetime = "dt2"
+    lock_detail.keypad = None
+    data._device_detail_by_id = {lock_id: lock_detail}
+
+    new_detail = Mock(spec=LockDetail)
+    new_detail.door_state = "wrong"
+    new_detail.door_state_datetime = "wrong"
+    new_detail.lock_status = "wrong"
+    new_detail.lock_status_datetime = "wrong"
+    new_detail.keypad = None
+    new_detail.offline_key = None
+
+    stream = Mock()
+    stream.push_updates_connected = True
+    data.activity_stream = stream
+
+    async def _update(device, api_call):
+        data._device_detail_by_id[lock_id] = new_detail
+
+    signals: list[str] = []
+    with (
+        patch.object(data, "_async_update_device_detail", side_effect=_update),
+        patch.object(
+            data, "async_signal_device_id_update", side_effect=signals.append
+        ),
+    ):
+        await data._async_refresh_device_detail_by_id(lock_id)
+
+    # Live attrs were re-applied after the update overwrote them.
+    assert new_detail.door_state == "open"
+    assert new_detail.lock_status == "locked"
+    assert signals == [lock_id]
+
+
+@pytest.mark.asyncio
+async def test_refresh_device_detail_by_id_lock_propagates_keypad_into_index():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    data._locks_by_id = {"L": Mock()}
+    data.activity_stream = None  # so push_updates_connected branch is skipped
+
+    keypad = Mock()
+    keypad.device_id = "KP1"
+    new_detail = Mock(spec=LockDetail)
+    new_detail.keypad = keypad
+    new_detail.offline_key = None
+    data._device_detail_by_id = {"L": Mock(spec=LockDetail)}
+
+    async def _update(device, api_call):
+        data._device_detail_by_id["L"] = new_detail
+
+    with (
+        patch.object(data, "_async_update_device_detail", side_effect=_update),
+        patch.object(data, "async_signal_device_id_update"),
+    ):
+        await data._async_refresh_device_detail_by_id("L")
+
+    assert data._device_detail_by_id["KP1"] is keypad
+
+
+@pytest.mark.asyncio
+async def test_refresh_device_detail_by_id_doorbell_branch():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    doorbell = Mock()
+    data._doorbells_by_id = {"B": doorbell}
+    gateway.api.async_get_doorbell_detail = AsyncMock()
+
+    with (
+        patch.object(data, "_async_update_device_detail", new=AsyncMock()) as inner,
+        patch.object(data, "async_signal_device_id_update") as signal,
+    ):
+        await data._async_refresh_device_detail_by_id("B")
+
+    inner.assert_awaited_once_with(doorbell, gateway.api.async_get_doorbell_detail)
+    signal.assert_called_once_with("B")
+
+
+@pytest.mark.asyncio
+async def test_async_update_device_detail_happy_path_stores_detail():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    device = Mock(device_id="d", device_name="Front")
+    detail = Mock(spec=LockDetail)
+    detail.offline_key = None
+    api_call = AsyncMock(return_value=detail)
+
+    await data._async_update_device_detail(device, api_call)
+
+    api_call.assert_awaited_once_with("token", "d")
+    assert data._device_detail_by_id["d"] is detail
+
+
+@pytest.mark.asyncio
+async def test_async_update_device_detail_invokes_offline_key_hook():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    data.async_offline_key_discovered = Mock()
+
+    device = Mock(device_id="d", device_name="Front")
+    detail = Mock(spec=LockDetail)
+    detail.offline_key = "abc"
+    api_call = AsyncMock(return_value=detail)
+
+    await data._async_update_device_detail(device, api_call)
+
+    data.async_offline_key_discovered.assert_called_once_with(detail)
+
+
+@pytest.mark.asyncio
+async def test_async_update_device_detail_returns_early_on_client_error(caplog):
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    device = Mock(device_id="d", device_name="Front")
+    api_call = AsyncMock(side_effect=ClientError("net down"))
+
+    with caplog.at_level(logging.ERROR):
+        await data._async_update_device_detail(device, api_call)
+
+    # Should not have stored anything because we bailed out.
+    assert "d" not in data._device_detail_by_id
+    assert "Request error trying to retrieve" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_device_and_get_device_name_resolve_both_indexes():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    lock = Mock(device_name="LockyMcLockface")
+    doorbell = Mock(device_name="Belly")
+    data._locks_by_id = {"L": lock}
+    data._doorbells_by_id = {"B": doorbell}
+
+    assert data.get_device("L") is lock
+    assert data.get_device("B") is doorbell
+    assert data.get_device("missing") is None
+    assert data._get_device_name("L") == "LockyMcLockface"
+    assert data._get_device_name("B") == "Belly"
+    assert data._get_device_name("missing") is None
+
+
+@pytest.mark.parametrize(
+    ("method_name", "api_attr", "args", "returns_activities"),
+    [
+        ("async_lock", "async_lock_return_activities", (), True),
+        ("async_unlock", "async_unlock_return_activities", (), True),
+        ("async_unlatch", "async_unlatch_return_activities", (), True),
+        ("async_lock_async", "async_lock_async", (True,), False),
+        ("async_unlock_async", "async_unlock_async", (True,), False),
+        ("async_unlatch_async", "async_unlatch_async", (True,), False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_simple_lock_operations_delegate_to_api(
+    method_name, api_attr, args, returns_activities
+):
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    sentinel = ["activity"] if returns_activities else "request-id"
+    api_method = AsyncMock(return_value=sentinel)
+    setattr(gateway.api, api_attr, api_method)
+
+    result = await getattr(data, method_name)("dev", *args)
+
+    assert result == sentinel
+    api_method.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_status_async_wraps_underlying_call_with_rate_limit():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    gateway.api.async_status_async = AsyncMock(return_value="rid")
+
+    with (
+        patch("yalexs.manager.data._RateLimitChecker.check_rate_limit", new=AsyncMock()) as chk,
+        patch("yalexs.manager.data._RateLimitChecker.register_wakeup", new=AsyncMock()) as reg,
+    ):
+        result = await data.async_status_async("dev", True)
+
+    assert result == "rid"
+    chk.assert_awaited_once_with("token")
+    reg.assert_awaited_once_with("token")
+
+
+@pytest.mark.asyncio
+async def test_async_call_api_op_wraps_aiohttp_errors_with_device_name():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    data._locks_by_id = {"L": Mock(device_name="Front Door")}
+
+    async def boom(*_, **__):
+        raise AugustApiAIOHTTPError("nope")
+
+    with pytest.raises(Exception) as exc_info:
+        await data._async_call_api_op_requires_bridge("L", boom)
+    assert "Front Door" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_async_call_api_op_falls_back_to_device_id_when_unknown():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    async def boom(*_, **__):
+        raise AugustApiAIOHTTPError("nope")
+
+    with pytest.raises(Exception) as exc_info:
+        await data._async_call_api_op_requires_bridge("UNKNOWN", boom)
+    assert "DeviceID: UNKNOWN" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_async_get_doorbell_image_happy_path():
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    doorbell = Mock()
+    doorbell.async_get_doorbell_image = AsyncMock(return_value=b"png")
+    data._device_detail_by_id = {"d": doorbell}
+
+    session = Mock()
+    result = await data.async_get_doorbell_image("d", session, timeout=2.0)
+
+    assert result == b"png"
+    doorbell.async_get_doorbell_image.assert_awaited_once_with(session, 2.0)
+
+
+@pytest.mark.asyncio
+async def test_async_get_doorbell_image_retries_on_token_expired_for_yale():
+    """Yale brands refresh the content token and retry once."""
+    gateway = _make_gateway(Brand.YALE_HOME)
+    data = MockYaleXSData(gateway)
+    first = Mock()
+    first.async_get_doorbell_image = AsyncMock(side_effect=ContentTokenExpired)
+    refreshed = Mock()
+    refreshed.async_get_doorbell_image = AsyncMock(return_value=b"jpg")
+
+    data._device_detail_by_id = {"d": first}
+
+    async def _refresh(device_id):
+        data._device_detail_by_id[device_id] = refreshed
+
+    with patch.object(data, "refresh_camera_by_id", side_effect=_refresh) as ref:
+        result = await data.async_get_doorbell_image("d", Mock())
+
+    assert result == b"jpg"
+    ref.assert_awaited_once_with("d")
+
+
+@pytest.mark.asyncio
+async def test_async_get_doorbell_image_reraises_for_non_yale_brand():
+    gateway = _make_gateway(Brand.AUGUST)
+    data = MockYaleXSData(gateway)
+    doorbell = Mock()
+    doorbell.async_get_doorbell_image = AsyncMock(side_effect=ContentTokenExpired)
+    data._device_detail_by_id = {"d": doorbell}
+
+    with pytest.raises(ContentTokenExpired):
+        await data.async_get_doorbell_image("d", Mock())
+
+
+@pytest.mark.asyncio
+async def test_remove_inoperative_doorbells_drops_those_without_details(caplog):
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    bell_ok = Mock(device_id="ok", device_name="Front Bell")
+    bell_missing = Mock(device_id="missing", device_name="Missing Bell")
+    data._doorbells_by_id = {"ok": bell_ok, "missing": bell_missing}
+    data._device_detail_by_id = {"ok": Mock()}
+
+    with caplog.at_level(logging.INFO):
+        data._remove_inoperative_doorbells()
+
+    assert "ok" in data._doorbells_by_id
+    assert "missing" not in data._doorbells_by_id
+    assert "Missing Bell" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_remove_inoperative_locks_keeps_ones_with_bridge_drops_others(caplog):
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    keep = Mock(device_id="keep", device_name="WithBridge")
+    no_detail = Mock(device_id="no_detail", device_name="NoDetail")
+    no_bridge = Mock(device_id="no_bridge", device_name="NoBridge")
+    data._locks_by_id = {
+        "keep": keep,
+        "no_detail": no_detail,
+        "no_bridge": no_bridge,
+    }
+    keep_detail = Mock(spec=LockDetail, bridge=Mock())
+    no_bridge_detail = Mock(spec=LockDetail, bridge=None)
+    data._device_detail_by_id = {
+        "keep": keep_detail,
+        "no_bridge": no_bridge_detail,
+    }
+
+    with caplog.at_level(logging.INFO):
+        data._remove_inoperative_locks()
+
+    assert "keep" in data._locks_by_id
+    assert "no_detail" not in data._locks_by_id
+    assert "no_bridge" not in data._locks_by_id
+    # When a lock has no bridge we also evict its detail entry.
+    assert "no_bridge" not in data._device_detail_by_id
+    assert "NoDetail" in caplog.text
+    assert "NoBridge" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_async_push_message_catches_unexpected_exceptions(caplog):
+    """Any exception bubbling out of _async_handle_push_message is swallowed and
+    logged at ERROR with a traceback so a single bad message can't kill the
+    push loop.
+    """
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+
+    with (
+        patch.object(
+            data, "_async_handle_push_message", side_effect=RuntimeError("kaboom")
+        ),
+        caplog.at_level(logging.ERROR),
+    ):
+        # Should NOT raise.
+        data.async_push_message("dev", datetime.now(timezone.utc), {}, SOURCE_PUBNUB)
+
+    assert "Error processing push message" in caplog.text
+    assert "kaboom" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_async_stop_is_safe_when_nothing_was_initialized():
+    """async_stop must tolerate having no activity_stream, no initial-sync task,
+    and no push_unsub — i.e. cleanup called before setup completed.
+    """
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    # All defaults: activity_stream=None, _initial_sync_task=None, _push_unsub=None
+    await data.async_stop()
+    assert data._shutdown is True
+
+
+@pytest.mark.asyncio
+async def test_async_handle_push_message_status_only_short_circuits():
+    """When the device produces only is_status activities and state is unchanged,
+    the for-loop body must be entered but exit via the early `return` (line 302)
+    without scheduling any house refresh.
+    """
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    device = Mock(device_id="d", house_id="h")
+    data._device_detail_by_id = {"d": device}
+
+    stream = Mock()
+    stream.async_process_newer_device_activities = Mock(return_value=True)
+    stream.async_schedule_house_id_refresh = Mock()
+    data.activity_stream = stream
+
+    status_activity = Mock(is_status=True)
+
+    # Seed the state tracker so the next call detects "unchanged" and returns
+    # before the for-loop that would schedule refreshes.
+    state_key = f"d:{SOURCE_PUBNUB}"
+    data._last_push_state[state_key] = {"lock": "locked", "door": "closed"}
+
+    with (
+        patch(
+            "yalexs.manager.data.activities_from_pubnub_message",
+            return_value=[status_activity],
+        ),
+        patch.object(data, "async_signal_device_id_update"),
+    ):
+        data._async_handle_push_message(
+            "d",
+            datetime.now(timezone.utc),
+            {"status": "locked", "doorState": "closed"},
+            SOURCE_PUBNUB,
+        )
+
+    stream.async_schedule_house_id_refresh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_push_message_logs_and_skips_status_activities_when_state_changed():
+    """When the message represents a real (changed) state but the activities list
+    contains a status update, that status entry is logged and `continue`d past
+    while only non-status activities trigger a house refresh.
+    """
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    device = Mock(device_id="d", house_id="h")
+    data._device_detail_by_id = {"d": device}
+
+    stream = Mock()
+    stream.async_process_newer_device_activities = Mock(return_value=True)
+    stream.async_schedule_house_id_refresh = Mock()
+    data.activity_stream = stream
+
+    status_act = Mock(is_status=True)
+    real_act = Mock(is_status=False)
+
+    with (
+        patch(
+            "yalexs.manager.data.activities_from_pubnub_message",
+            return_value=[status_act, real_act],
+        ),
+        patch.object(data, "async_signal_device_id_update"),
+    ):
+        data._async_handle_push_message(
+            "d",
+            datetime.now(timezone.utc),
+            {"status": "locked", "doorState": "closed"},
+            SOURCE_PUBNUB,
+        )
+
+    stream.async_schedule_house_id_refresh.assert_called_once_with("h")
+
+
+class TestIsUnchangedPushStateEarlyReturns:
+    """Cover the early-return branches in _is_unchanged_push_state."""
+
+    def setup_method(self):
+        class _D:
+            _is_unchanged_push_state = YaleXSData._is_unchanged_push_state
+
+            def __init__(self) -> None:
+                self._last_push_state: dict = {}
+
+        self.data = _D()
+
+    def test_websocket_message_without_relevant_fields_is_processed(self):
+        assert (
+            self.data._is_unchanged_push_state(
+                "d", {"unrelated": "x"}, SOURCE_WEBSOCKET, []
+            )
+            is False
+        )
+
+    def test_pubnub_message_without_relevant_fields_is_processed(self):
+        assert (
+            self.data._is_unchanged_push_state(
+                "d", {"unrelated": "x"}, SOURCE_PUBNUB, []
+            )
+            is False
+        )
