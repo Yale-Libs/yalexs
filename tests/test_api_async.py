@@ -1697,10 +1697,7 @@ class TestDebugLoggingPath(unittest.IsolatedAsyncioTestCase):
             payload={"UserID": "abc"},
         )
         api = ApiAsync(self._new_session())
-        # Turn debug on for the duration of the call so the debug branches run.
-        api_async._LOGGER.setLevel("DEBUG")
-        try:
+        with self.assertLogs("yalexs.api_async", level="DEBUG") as captured:
             result = await api.async_get_user(ACCESS_TOKEN)
-        finally:
-            api_async._LOGGER.setLevel("WARNING")
         assert result == {"UserID": "abc"}
+        assert captured.records, "expected at least one debug record"
