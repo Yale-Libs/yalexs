@@ -279,7 +279,9 @@ async def test_get_latest_device_activity_skips_older_after_newer() -> None:
     """When iteration sees the newer entry first, the older one hits the continue branch."""
     stream, *_ = _build_stream()
     now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    newer = _make_activity("dev", ActivityType.DOOR_OPERATION, now + timedelta(seconds=10))
+    newer = _make_activity(
+        "dev", ActivityType.DOOR_OPERATION, now + timedelta(seconds=10)
+    )
     older = _make_activity("dev", ActivityType.LOCK_OPERATION, now)
     stream._latest_activities["dev"][ActivityType.DOOR_OPERATION] = newer
     stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = older
