@@ -58,7 +58,12 @@ from yalexs.const import (
     HEADER_AUGUST_ACCESS_TOKEN,
     Brand,
 )
-from yalexs.exceptions import AugustApiAIOHTTPError, ContentTokenExpired, InvalidAuth
+from yalexs.exceptions import (
+    AugustApiAIOHTTPError,
+    ContentTokenExpired,
+    InvalidAuth,
+    YaleApiError,
+)
 from yalexs.lock import LockDoorStatus, LockStatus
 
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
@@ -1369,6 +1374,73 @@ class MockedResponse(ClientResponse):
     @property
     def status(self):
         return self._mocked_status
+
+
+@pytest.mark.parametrize(
+    "status_code",
+    [502, 429],
+)
+@pytest.mark.asyncio
+async def test_retry_exhausts_all_attempts(
+    status_code: int, mock_aioresponse: aioresponses
+) -> None:
+    """All attempts return a retryable status; loop exits via the while condition."""
+    attempt = 0
+
+    def response_callback(url, **kwargs):
+        nonlocal attempt
+        attempt += 1
+        return CallbackResult(status=status_code, body="{}", reason="retry")
+
+    for _ in range(2):
+        mock_aioresponse.post(
+            ApiCommon(DEFAULT_BRAND).get_brand_url(
+                API_VALIDATE_VERIFICATION_CODE_URLS["email"]
+            ),
+            callback=response_callback,
+        )
+
+    async with ClientSession() as session:
+        api = ApiAsync(session)
+        with (
+            patch("yalexs.api_async.API_EXCEPTION_RETRY_TIME", 0),
+            patch("yalexs.api_async.API_RETRY_ATTEMPTS", 2),
+            patch("yalexs.api_async.API_RETRY_TIME", 0),
+            patch("yalexs.api_async.asyncio.sleep"),
+            pytest.raises(YaleApiError),
+        ):
+            await api.async_validate_verification_code(
+                ACCESS_TOKEN, "email", "emailaddress", 123456
+            )
+    assert attempt == 2
+
+
+@pytest.mark.asyncio
+async def test_async_dict_to_api_preserves_existing_headers(
+    mock_aioresponse: aioresponses,
+) -> None:
+    """When headers are pre-populated, _async_dict_to_api must not overwrite them."""
+    custom_headers = {"X-Custom-Header": "preserve-me"}
+    captured: dict = {}
+
+    def response_callback(url, **kwargs):
+        captured["headers"] = dict(kwargs.get("headers") or {})
+        return CallbackResult(status=200, body="{}")
+
+    target_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL)
+    mock_aioresponse.get(target_url, callback=response_callback)
+
+    async with ClientSession() as session:
+        api = ApiAsync(session)
+        api_dict = {
+            "url": target_url,
+            "method": "get",
+            "headers": custom_headers,
+        }
+        response = await api._async_dict_to_api(api_dict)
+
+    assert response.status == 200
+    assert captured["headers"] == custom_headers
 
 
 @pytest.mark.parametrize(
