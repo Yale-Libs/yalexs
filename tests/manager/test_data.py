@@ -481,9 +481,7 @@ class TestPushMessageForUnknownDevice:
 
         # The if-guard was False so nothing downstream fired.
         assert data.signaled == []
-        assert (
-            not data.activity_stream.async_schedule_house_id_refresh.called
-        )
+        assert not data.activity_stream.async_schedule_house_id_refresh.called
 
     def test_all_status_activities_complete_loop_without_refresh(self):
         """All-status activities walk the for-loop without ever calling refresh.
@@ -521,9 +519,7 @@ class TestPushMessageForUnknownDevice:
         # The signal still fired (it's before the for-loop), but no
         # house refresh was scheduled because every activity continued.
         assert data.signaled == [device_id]
-        assert (
-            not data.activity_stream.async_schedule_house_id_refresh.called
-        )
+        assert not data.activity_stream.async_schedule_house_id_refresh.called
 
     def test_known_device_id_still_processed(self):
         """Sanity check: the new guard must not break the happy path."""
