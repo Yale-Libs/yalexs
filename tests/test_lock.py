@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from yalexs.bridge import BridgeStatus
 from yalexs.lock import (
     Lock,
     LockDetail,
@@ -61,7 +62,9 @@ def test_lock_is_operable_false_for_regular_user() -> None:
 
 
 def test_lock_status_setter_rejects_non_enum(online_lock: LockDetail) -> None:
-    with pytest.raises(ValueError):
+    # Python 3.11 raises TypeError on `"str" in EnumClass`; 3.12+ returns False
+    # and the setter then raises ValueError. Accept either.
+    with pytest.raises((TypeError, ValueError)):
         online_lock.lock_status = "definitely-not-a-status"  # type: ignore[assignment]
 
 
@@ -86,7 +89,9 @@ def test_lock_status_datetime_setter_accepts_datetime(
 
 
 def test_door_state_setter_rejects_non_enum(online_lock: LockDetail) -> None:
-    with pytest.raises(ValueError):
+    # Python 3.11 raises TypeError on `"str" in EnumClass`; 3.12+ returns False
+    # and the setter then raises ValueError. Accept either.
+    with pytest.raises((TypeError, ValueError)):
         online_lock.door_state = "definitely-not-a-door-state"  # type: ignore[assignment]
 
 
@@ -138,8 +143,6 @@ def test_set_online_with_bridge_delegates_to_bridge_status() -> None:
     bridge = lock.bridge
     assert bridge is not None and bridge.status is not None
     lock.set_online(False)
-    from yalexs.bridge import BridgeStatus
-
     assert bridge.status.current is BridgeStatus.OFFLINE
     lock.set_online(True)
     assert bridge.status.current is BridgeStatus.ONLINE
