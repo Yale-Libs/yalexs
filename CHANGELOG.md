@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v9.2.6 (2026-05-29)
+
+### Bug Fixes
+
+- **manager**: Call SubscriberMixin.async_stop() from subclass teardown
+  ([#388](https://github.com/Yale-Libs/yalexs/pull/388),
+  [`9f0b45e`](https://github.com/Yale-Libs/yalexs/commit/9f0b45e9edcd0305be952bb6ec749e94f381fbc7))
+
+- **socketio**: Cancel pending refresh task on disconnect and shutdown
+  ([#387](https://github.com/Yale-Libs/yalexs/pull/387),
+  [`9544f3f`](https://github.com/Yale-Libs/yalexs/commit/9544f3fa4f9f0f862803f71bb9bbc39d315ba5fb))
+
+
 ## v9.2.5 (2026-05-29)
 
 ### Bug Fixes
