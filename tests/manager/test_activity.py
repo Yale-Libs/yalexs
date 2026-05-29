@@ -344,6 +344,34 @@ async def test_async_first_refresh_skips_when_push_connected() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_first_refresh_skips_house_with_running_update() -> None:
+    """_async_first_refresh must skip houses that already have a running update.
+
+    Covers the activity.py:137->136 partial branch — the `if not
+    self._update_running(house_id)` False arc (update IS running, fall
+    straight back to the for-loop) was previously never exercised because
+    every existing test entered the if body.
+    """
+    stream, _api, async_get = _build_stream(house_ids={"busy"})
+    async_get.return_value = []
+    # Pre-seed an unfinished Future as the "busy" task; _update_running checks
+    # `.done()`, so a pending Future is enough to make the guard return True
+    # without scheduling any new work.
+    pending: asyncio.Future = asyncio.get_running_loop().create_future()
+    stream._update_tasks["busy"] = pending
+    assert stream._update_running("busy")
+
+    await stream._async_first_refresh()
+    await asyncio.sleep(0)
+
+    # The pre-seeded pending Future was NOT replaced — no new task scheduled,
+    # async_get was never called for "busy".
+    assert stream._update_tasks["busy"] is pending
+    assert async_get.call_count == 0
+    pending.cancel()
+
+
+@pytest.mark.asyncio
 async def test_create_update_task_raises_when_running() -> None:
     """Creating a duplicate update task raises RuntimeError."""
     stream, _api, async_get = _build_stream()

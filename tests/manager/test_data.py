@@ -446,6 +446,85 @@ class TestPushMessageForUnknownDevice:
         error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
         assert error_records == []
 
+    def test_no_signal_when_process_returns_false(self):
+        """async_process_newer_device_activities=False short-circuits before signal.
+
+        Covers the data.py:286->exit partial branch — the
+        `if activities and async_process_newer_device_activities(activities):`
+        False arc (no signal, no per-activity scan) was unexercised.
+        """
+        data = self._build_data()
+        # Tell the stream the activities are stale → guard is False.
+        data.activity_stream.async_process_newer_device_activities = Mock(
+            return_value=False
+        )
+        device_id = "KNOWN_LOCK_ID"
+        mock_device = Mock()
+        mock_device.device_id = device_id
+        mock_device.house_id = "house"
+        data._device_detail_by_id[device_id] = mock_device
+
+        mock_activity = Mock()
+        mock_activity.is_status = False
+        mock_activity.action = "lock"
+
+        with patch(
+            "yalexs.manager.data.activities_from_pubnub_message",
+            return_value=[mock_activity],
+        ):
+            data._async_handle_push_message(
+                device_id,
+                datetime.now(timezone.utc),
+                {"status": "locked", "doorState": "closed"},
+                SOURCE_PUBNUB,
+            )
+
+        # The if-guard was False so nothing downstream fired.
+        assert data.signaled == []
+        assert (
+            not data.activity_stream.async_schedule_house_id_refresh.called
+        )
+
+    def test_all_status_activities_complete_loop_without_refresh(self):
+        """All-status activities walk the for-loop without ever calling refresh.
+
+        Covers the data.py:303->exit partial branch — when every activity
+        in the list is a status update, every iteration hits `continue`
+        and the for-loop falls through to function exit without ever
+        executing `async_schedule_house_id_refresh` + `break`.
+        """
+        data = self._build_data()
+        device_id = "KNOWN_LOCK_ID"
+        mock_device = Mock()
+        mock_device.device_id = device_id
+        mock_device.house_id = "house"
+        data._device_detail_by_id[device_id] = mock_device
+
+        status_a = Mock()
+        status_a.is_status = True
+        status_a.action = "lock"
+        status_b = Mock()
+        status_b.is_status = True
+        status_b.action = "unlock"
+
+        with patch(
+            "yalexs.manager.data.activities_from_pubnub_message",
+            return_value=[status_a, status_b],
+        ):
+            data._async_handle_push_message(
+                device_id,
+                datetime.now(timezone.utc),
+                {"status": "locked", "doorState": "closed"},
+                SOURCE_PUBNUB,
+            )
+
+        # The signal still fired (it's before the for-loop), but no
+        # house refresh was scheduled because every activity continued.
+        assert data.signaled == [device_id]
+        assert (
+            not data.activity_stream.async_schedule_house_id_refresh.called
+        )
+
     def test_known_device_id_still_processed(self):
         """Sanity check: the new guard must not break the happy path."""
         data = self._build_data()
