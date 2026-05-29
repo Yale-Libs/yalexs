@@ -193,6 +193,60 @@ async def test_cancel_update_interval_is_idempotent() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scheduled_refresh_skips_when_prior_task_still_running(
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A slow refresh must not be orphaned by the next interval tick.
+
+    Without the guard, the second tick overwrites `_refresh_task` while the
+    first refresh is still running, dropping its result/exception and
+    allowing two `_async_refresh` calls to mutate shared state in parallel.
+    """
+
+    class _SlowSubscriber(SubscriberMixin):
+        def __init__(self, update_interval: timedelta) -> None:
+            super().__init__(update_interval)
+            self.refresh_starts = 0
+            self.release = asyncio.Event()
+
+        async def _async_refresh(self) -> None:
+            self.refresh_starts += 1
+            await self.release.wait()
+
+    sub = _SlowSubscriber(timedelta(seconds=1))
+    sub.async_subscribe_device_id("lock1", MagicMock())
+
+    # First tick: refresh starts and blocks on the event.
+    freezer.tick(2)
+    fire_time_changed()
+    await asyncio.sleep(0)
+    assert sub.refresh_starts == 1
+    first_task = sub._refresh_task
+    assert first_task is not None and not first_task.done()
+
+    # Second tick while first refresh is still in flight: must NOT spawn
+    # a second task, must NOT overwrite the slot.
+    freezer.tick(2)
+    fire_time_changed()
+    await asyncio.sleep(0)
+    assert sub.refresh_starts == 1
+    assert sub._refresh_task is first_task
+
+    # Release the first refresh and tick again — a fresh task may now run.
+    sub.release.set()
+    await first_task
+    sub.release.clear()
+    freezer.tick(2)
+    fire_time_changed()
+    await asyncio.sleep(0)
+    assert sub.refresh_starts == 2
+    assert sub._refresh_task is not first_task
+
+    sub.release.set()
+    sub.async_stop()
+
+
+@pytest.mark.asyncio
 async def test_setup_listeners_replaces_existing_interval() -> None:
     sub = _Subscriber(timedelta(seconds=30))
     sub.async_subscribe_device_id("lock1", MagicMock())

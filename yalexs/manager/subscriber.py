@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
@@ -11,6 +12,8 @@ from functools import partial
 from typing import Any
 
 from ..backports.tasks import create_eager_task
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SubscriberMixin(ABC):
@@ -49,6 +52,14 @@ class SubscriberMixin(ABC):
             self._update_interval_seconds,
             self._async_scheduled_refresh,
         )
+        if self._refresh_task is not None and not self._refresh_task.done():
+            # Previous refresh still in flight — skip this tick rather than
+            # orphan the prior task and mutate shared state concurrently.
+            _LOGGER.debug(
+                "%s: skipping scheduled refresh; previous refresh still running",
+                self,
+            )
+            return
         self._refresh_task = create_eager_task(
             self._async_refresh(), loop=self._loop, name=f"{self} schedule refresh"
         )
