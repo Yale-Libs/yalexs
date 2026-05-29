@@ -7,10 +7,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import socketio
+from aiohttp import ClientError
 
 from ..api_common import api_auth_headers
 from ..backports.tasks import create_eager_task
 from ..const import Brand
+from ..exceptions import YaleApiError
 
 if sys.version_info < (3, 11):
     UTC = timezone.utc
@@ -105,6 +107,18 @@ class SocketIORunner:
             self._listeners.clear()
             with suppress(asyncio.CancelledError):
                 await socketio_task
+            if self._subscriber_id is not None:
+                try:
+                    await api.async_remove_websocket_subscription(
+                        self._access_token, self._subscriber_id
+                    )
+                except (YaleApiError, ClientError, asyncio.TimeoutError):
+                    _LOGGER.warning(
+                        "Failed to remove websocket subscription %s",
+                        self._subscriber_id,
+                        exc_info=True,
+                    )
+                self._subscriber_id = None
             _LOGGER.debug("socketio stopped")
 
         return _async_unsub

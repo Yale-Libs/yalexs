@@ -9,8 +9,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from aiohttp import ClientError
 
 from yalexs.const import Brand
+from yalexs.exceptions import YaleApiError
 from yalexs.manager.socketio import SocketIORunner
 
 
@@ -21,6 +23,7 @@ def _make_gateway(token: str = "tok") -> MagicMock:  # noqa: S107
     gateway.api.async_add_websocket_subscription = AsyncMock(
         return_value={"subscriberID": "sub-123"}
     )
+    gateway.api.async_remove_websocket_subscription = AsyncMock(return_value=None)
     return gateway
 
 
@@ -186,6 +189,62 @@ async def test_run_fetches_token_and_subscription_then_returns_unsub() -> None:
     runner.subscribe(MagicMock())
     await unsub()
     assert runner._listeners == set()
+    # subscription must be released server-side and the id cleared so a
+    # subsequent run() shutdown doesn't double-delete.
+    gateway.api.async_remove_websocket_subscription.assert_awaited_once_with(
+        "t1", "sub-123"
+    )
+    assert runner._subscriber_id is None
+
+
+@pytest.mark.asyncio
+async def test_unsub_skips_remove_when_subscriber_id_already_cleared() -> None:
+    gateway = _make_gateway()
+    runner = SocketIORunner(gateway)
+
+    async def _fake_run() -> None:
+        return None
+
+    with patch.object(runner, "_run", side_effect=_fake_run):
+        unsub = await runner.run(user_uuid="user")
+
+    # Simulate the subscription having been released elsewhere — the unsub
+    # closure must not attempt a second delete in that case.
+    runner._subscriber_id = None
+    await unsub()
+    gateway.api.async_remove_websocket_subscription.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "remove_error",
+    [
+        YaleApiError("server gone"),
+        ClientError("disconnected"),
+        asyncio.TimeoutError(),
+    ],
+)
+@pytest.mark.asyncio
+async def test_unsub_swallows_remove_subscription_errors(
+    remove_error: Exception,
+) -> None:
+    gateway = _make_gateway()
+    gateway.api.async_remove_websocket_subscription = AsyncMock(
+        side_effect=remove_error
+    )
+    runner = SocketIORunner(gateway)
+
+    sleeper = asyncio.Event()
+
+    async def _fake_run() -> None:
+        await sleeper.wait()
+
+    with patch.object(runner, "_run", side_effect=_fake_run):
+        unsub = await runner.run(user_uuid="user")
+
+    # Failure on remove must not propagate — shutdown must still complete.
+    await unsub()
+    gateway.api.async_remove_websocket_subscription.assert_awaited_once()
+    assert runner._subscriber_id is None
 
 
 @pytest.mark.asyncio
