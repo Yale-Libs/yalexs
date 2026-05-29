@@ -451,12 +451,22 @@ class ApiAsync(ApiCommon):
         )
         return await response.json()
 
-    async def async_get_websocket_subscriptions(self, access_token: str) -> str:
+    async def async_get_websocket_subscriptions(
+        self, access_token: str, subscriber_id: str
+    ) -> str:
         """Get websocket subscriptions."""
         response = await self._async_dict_to_api(
-            self._build_websocket_get_request(access_token)
+            self._build_websocket_get_request(access_token, subscriber_id)
         )
         return await response.text()
+
+    async def async_remove_websocket_subscription(
+        self, access_token: str, subscriber_id: str
+    ) -> None:
+        """Remove a websocket subscription."""
+        await self._async_dict_to_api(
+            self._build_websocket_delete_request(access_token, subscriber_id)
+        )
 
     async def _async_dict_to_api(self, api_dict: dict[str, Any]) -> ClientResponse:
         url = api_dict.pop("url")
