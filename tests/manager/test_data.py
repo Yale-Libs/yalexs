@@ -2065,6 +2065,33 @@ async def test_async_stop_is_safe_when_nothing_was_initialized() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_stop_cancels_mixin_interval_and_refresh_task() -> None:
+    """async_stop must release the SubscriberMixin interval timer and refresh task.
+
+    Without super().async_stop(), the mixin's call_later handle keeps firing
+    _async_scheduled_refresh after teardown, leaking timers across HA reloads.
+    """
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    # Subscribe so the mixin schedules its interval.
+    data.async_subscribe_device_id("device1", Mock())
+    assert data._unsub_interval is not None
+    # Simulate one scheduled refresh tick populating the mixin task.
+    data._refresh_task = asyncio.get_running_loop().create_task(asyncio.sleep(60))
+
+    refresh_task = data._refresh_task
+    interval = data._unsub_interval
+
+    await data.async_stop()
+
+    assert data._unsub_interval is None
+    assert interval.cancelled()
+    with pytest.raises(asyncio.CancelledError):
+        await refresh_task
+    assert refresh_task.cancelled()
+
+
+@pytest.mark.asyncio
 async def test_async_handle_push_message_status_only_short_circuits() -> None:
     """When the device produces only is_status activities and state is unchanged,
     the for-loop body must be entered but exit via the early `return` (line 302)
