@@ -57,7 +57,7 @@ from yalexs.const import (
     HEADER_AUGUST_ACCESS_TOKEN,
     Brand,
 )
-from yalexs.exceptions import AugustApiAIOHTTPError, ContentTokenExpired
+from yalexs.exceptions import AugustApiAIOHTTPError, ContentTokenExpired, InvalidAuth
 from yalexs.lock import LockDoorStatus, LockStatus
 
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
@@ -1317,6 +1317,25 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
                 _raise_response_exceptions(mocked_response)
             except AugustApiAIOHTTPError as err:
                 self.assertEqual(str(err), error_map[status_code])
+
+        # 401 and 403 should both raise InvalidAuth with a "Verify brand" hint.
+        for status_code in (401, 403):
+            mocked_response = MockedResponse(
+                "get",
+                URL("http://code.any.tld"),
+                request_info=request_info,
+                writer=mock.Mock(),
+                continue100=None,
+                timer=TimerNoop(),
+                traces=[],
+                status=status_code,
+                loop=loop,
+                session=session,
+            )
+
+            with self.assertRaises(InvalidAuth) as ctx:
+                _raise_response_exceptions(mocked_response)
+            self.assertIn("Verify brand is correct", str(ctx.exception))
 
     @aioresponses()
     async def test_async_get_usern(self, mock):
