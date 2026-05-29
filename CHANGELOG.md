@@ -2,6 +2,43 @@
 
 <!-- version list -->
 
+## v9.2.5 (2026-05-29)
+
+### Bug Fixes
+
+- **manager/subscriber**: Tolerate async_stop before any refresh scheduled
+  ([#386](https://github.com/Yale-Libs/yalexs/pull/386),
+  [`22bb759`](https://github.com/Yale-Libs/yalexs/commit/22bb75938331d8ce84b1c109f73f5efc88780606))
+
+### Documentation
+
+- **changelog**: Add PSR v10 insertion flag + backfill missed releases
+  ([#383](https://github.com/Yale-Libs/yalexs/pull/383),
+  [`151a396`](https://github.com/Yale-Libs/yalexs/commit/151a396b1691cf9d2354685a64d00a8ba124cc1c))
+
+- **readme**: Refresh for async-only API + Yale Home status
+  ([#379](https://github.com/Yale-Libs/yalexs/pull/379),
+  [`10b4133`](https://github.com/Yale-Libs/yalexs/commit/10b4133c7f197149c60b6ff53d6874039feaa4da))
+
+### Testing
+
+- **activity**: Cover entity/is_status/operator-image paths (95% → 100%)
+  ([#372](https://github.com/Yale-Libs/yalexs/pull/372),
+  [`587f61c`](https://github.com/Yale-Libs/yalexs/commit/587f61c88cb5dd248bd64a42934869478d84c76e))
+
+- **api_async**: Cover header preservation and retry exhaustion paths
+  ([#380](https://github.com/Yale-Libs/yalexs/pull/380),
+  [`c64bffd`](https://github.com/Yale-Libs/yalexs/commit/c64bffd787d1fd88f8340bd40a3a9d21c59a96af))
+
+- **lock**: Cover setter validation and offline-key paths (93% → 100%)
+  ([#370](https://github.com/Yale-Libs/yalexs/pull/370),
+  [`a229541`](https://github.com/Yale-Libs/yalexs/commit/a229541a6d39bd5de3ad9c26062b31b338502949))
+
+- **manager**: Close activity/data partial-branch gaps (99% → 100%)
+  ([#378](https://github.com/Yale-Libs/yalexs/pull/378),
+  [`fa27c49`](https://github.com/Yale-Libs/yalexs/commit/fa27c49fd8d22ba0e33b059655ff6a77d4bf3014))
+
+
 ## v9.2.4 (2026-05-29)
 
 ### Bug Fixes
