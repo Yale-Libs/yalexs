@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from yalexs.backports.tasks import create_eager_task
 from yalexs.const import Brand
 from yalexs.manager.socketio import SocketIORunner
 
@@ -186,6 +187,83 @@ async def test_run_fetches_token_and_subscription_then_returns_unsub() -> None:
     runner.subscribe(MagicMock())
     await unsub()
     assert runner._listeners == set()
+
+
+@pytest.mark.asyncio
+async def test_disconnect_handler_cancels_prior_pending_refresh_task(
+    fake_socketio_client: MagicMock,
+) -> None:
+    """Back-to-back disconnects must not leak the previous refresh task."""
+    gateway = _make_gateway(token="t")
+    runner = SocketIORunner(gateway)
+    runner._subscriber_id = "abc"
+
+    # Make the first token refresh block so the task stays pending.
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    async def _slow_refresh() -> str:
+        first_started.set()
+        await release_first.wait()
+        return "first"
+
+    gateway.async_get_access_token = AsyncMock(side_effect=_slow_refresh)
+    await runner._run()
+
+    fake_socketio_client.handlers["disconnect"]()
+    first_task = runner._refresh_task
+    assert first_task is not None
+    await first_started.wait()
+    assert not first_task.done()
+
+    # Second disconnect spawns a new task and must cancel the prior one.
+    gateway.async_get_access_token = AsyncMock(return_value="second")
+    fake_socketio_client.handlers["disconnect"]()
+    assert runner._refresh_task is not first_task
+    with pytest.raises(asyncio.CancelledError):
+        await first_task
+    await runner._refresh_task
+    assert runner._access_token == "second"
+
+
+@pytest.mark.asyncio
+async def test_unsub_cancels_pending_refresh_task(
+    fake_socketio_client: MagicMock,
+) -> None:
+    """Shutdown must drain a refresh task spawned by a late disconnect."""
+    gateway = _make_gateway(token="t1")
+    runner = SocketIORunner(gateway)
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _hang_refresh() -> str:
+        started.set()
+        await release.wait()
+        return "never"
+
+    sleeper = asyncio.Event()
+
+    async def _fake_run() -> None:
+        await sleeper.wait()
+
+    with patch.object(runner, "_run", side_effect=_fake_run):
+        unsub = await runner.run(user_uuid="user")
+
+    # Simulate a disconnect that fires just before shutdown.
+    gateway.async_get_access_token = AsyncMock(side_effect=_hang_refresh)
+
+    # Manually replicate the disconnect handler's eager-task spawn since the
+    # outer run() does not invoke _run in this test.
+    runner._refresh_task = create_eager_task(runner._refresh_access_token())
+    await started.wait()
+    pending = runner._refresh_task
+    assert not pending.done()
+
+    await unsub()
+
+    assert pending.done()
+    assert pending.cancelled()
 
 
 @pytest.mark.asyncio
