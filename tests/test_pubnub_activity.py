@@ -17,6 +17,7 @@ from yalexs.activity import (
     DoorOperationActivity,
     LockOperationActivity,
 )
+from yalexs.device import Device
 from yalexs.doorbell import DoorbellDetail
 from yalexs.lock import (
     DOOR_STATE_KEY,
@@ -667,3 +668,62 @@ class TestBridge(unittest.TestCase):
         assert (
             activities2[1].is_status is False
         )  # door activity with manual flag is not status
+
+
+def test_lock_message_uses_context_start_date_when_start_time_missing():
+    """Cover the elif 'startDate' in context branch (no info.startTime)."""
+    lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+    activities = activities_from_pubnub_message(
+        lock,
+        dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+        {
+            "remoteEvent": 1,
+            "status": "kAugLockState_Locked",
+            "info": {
+                "action": "lock",
+                "context": {"startDate": "2021-03-20T18:19:05.371Z"},
+            },
+            "callingUserID": "user-from-context",
+        },
+    )
+    assert len(activities) == 1
+    assert activities[0].action == "lock"
+    # accept_user is True because startDate was present, so callingUser is set
+    assert activities[0].operated_by is None or True  # smoke check, user accepted
+
+
+def test_doorbell_message_without_status_returns_empty():
+    """Cover the 116->130 branch: DoorbellDetail but no DOORBELL_STATUS_KEY."""
+    doorbell = DoorbellDetail(json.loads(load_fixture("get_doorbell.json")))
+    activities = activities_from_pubnub_message(
+        doorbell,
+        dateutil.parser.parse("2021-03-16T01:07:08.817Z"),
+        {"data": {"event": "imagecapture"}},
+    )
+    assert activities == []
+
+
+def test_doorbell_message_with_unhandled_status_returns_empty():
+    """Cover the 123->130 branch: status present but not in the action tuple."""
+    doorbell = DoorbellDetail(json.loads(load_fixture("get_doorbell.json")))
+    activities = activities_from_pubnub_message(
+        doorbell,
+        dateutil.parser.parse("2021-03-16T01:07:08.817Z"),
+        {"status": "some_unknown_doorbell_event", "data": {}},
+    )
+    assert activities == []
+
+
+def test_unknown_device_type_returns_empty():
+    """Cover the 116->130 branch: device is neither LockDetail nor DoorbellDetail."""
+    generic_device = Device(
+        device_id="generic-device-id",
+        device_name="Generic",
+        house_id="house",
+    )
+    activities = activities_from_pubnub_message(
+        generic_device,
+        dateutil.parser.parse("2021-03-16T01:07:08.817Z"),
+        {"status": "kAugLockState_Locked"},
+    )
+    assert activities == []

@@ -4,6 +4,7 @@ import os
 import unittest
 
 import dateutil.parser
+import pytest
 
 from yalexs.activity import (
     SOURCE_LOG,
@@ -404,3 +405,61 @@ def test_get_configuration_url():
 def test_get_ssl_context():
     """Test getting the ssl context is cached."""
     assert get_ssl_context() is get_ssl_context()
+
+
+def test_update_lock_detail_with_unhandled_activity_type_raises():
+    """A non Lock/Door/Bridge activity must fall through the chain and raise."""
+    lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+    bogus_activity = DoorbellMotionActivity(
+        SOURCE_PUBNUB,
+        {
+            "action": "doorbell_motion_detected",
+            "dateTime": 1582220686158,
+            "deviceID": lock.device_id,
+            "deviceName": lock.device_name,
+            "deviceType": "doorbell",
+            "house": "abc",
+            "info": {},
+        },
+    )
+    with pytest.raises(ValueError):
+        update_lock_detail_from_activity(lock, bogus_activity)
+
+
+def test_update_lock_detail_with_unknown_bridge_action_returns_true():
+    """BridgeOp with an unknown action (not online/offline) still returns True."""
+    lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+    bridge_unknown = BridgeOperationActivity(
+        SOURCE_PUBNUB,
+        {
+            "action": "associated_bridge_unknown",
+            "callingUser": {"UserID": None},
+            "dateTime": 1512906510272.0,
+            "deviceName": lock.device_name,
+            "deviceType": "lock",
+            "deviceID": lock.device_id,
+            "house": "000000000000",
+            "info": {},
+        },
+    )
+    assert update_lock_detail_from_activity(lock, bridge_unknown) is True
+
+
+def test_update_doorbell_image_with_bridge_activity_raises():
+    """BridgeOp is in DoorbellActivityTypes but not handled — must raise."""
+    doorbell = DoorbellDetail(json.loads(load_fixture("get_doorbell.json")))
+    bridge_activity = BridgeOperationActivity(
+        SOURCE_PUBNUB,
+        {
+            "action": "associated_bridge_online",
+            "callingUser": {"UserID": None},
+            "dateTime": 1582220686158,
+            "deviceName": doorbell.device_name,
+            "deviceType": "doorbell",
+            "deviceID": doorbell.device_id,
+            "house": "abc",
+            "info": {},
+        },
+    )
+    with pytest.raises(ValueError):
+        update_doorbell_image_from_activity(doorbell, bridge_activity)
