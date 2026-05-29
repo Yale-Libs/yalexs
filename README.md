@@ -10,7 +10,7 @@ This library is a fork of Joe Lu's excellent august library from https://github.
 
 This is an unofficial library. As of v9, only the **async** API (`yalexs.api_async.ApiAsync`, `yalexs.authenticator_async.AuthenticatorAsync`) is supported — the synchronous `Api` / `Authenticator` classes were removed in v8 (see [#141](https://github.com/Yale-Libs/yalexs/pull/141)).
 
-The `Brand.YALE_HOME` backend (Assa Abloy) no longer accepts the legacy public API key and now requires an official partner key. See [#167](https://github.com/Yale-Libs/yalexs/issues/167). `Brand.AUGUST` (Fortune Brands / Yale Access) still works with the public key.
+The public API key historically embedded in this library is no longer accepted by either backend. Both `Brand.AUGUST` (Fortune Brands / Yale Access) and `Brand.YALE_HOME` (Assa Abloy) now require an official partner key issued by the vendor. See [#167](https://github.com/Yale-Libs/yalexs/issues/167) for context. The usage example below is illustrative — you will need to supply a working key via the brand/API plumbing for it to authenticate against the live service.
 
 ## Install
 
