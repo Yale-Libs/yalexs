@@ -26,14 +26,14 @@ pip install yalexs
 
 #### Constructor
 
-| Argument                  | Description                                                                                                                                                                                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| api                       | An `ApiAsync` instance.                                                                                                                                                                                                                     |
-| login_method              | Login method, either `"phone"` or `"email"`.                                                                                                                                                                                                |
-| username                  | If `login_method` is `phone`, your full phone number including `+` and country code; otherwise your email address.                                                                                                                          |
-| password                  | Account password.                                                                                                                                                                                                                           |
-| install_id\*              | ID generated when the Yale Access app is installed. If not specified, the authenticator generates one. Providing a previously provisioned install ID skips the verification step.                                                           |
-| access_token_cache_file\* | Path to a token cache file. If set, authentication state is persisted to disk so subsequent runs can skip the login step until the token expires.                                                                                           |
+| Argument                  | Description                                                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| api                       | An `ApiAsync` instance.                                                                                                                                                           |
+| login_method              | Login method, either `"phone"` or `"email"`.                                                                                                                                      |
+| username                  | If `login_method` is `phone`, your full phone number including `+` and country code; otherwise your email address.                                                                |
+| password                  | Account password.                                                                                                                                                                 |
+| install_id\*              | ID generated when the Yale Access app is installed. If not specified, the authenticator generates one. Providing a previously provisioned install ID skips the verification step. |
+| access_token_cache_file\* | Path to a token cache file. If set, authentication state is persisted to disk so subsequent runs can skip the login step until the token expires.                                 |
 
 \* optional
 
