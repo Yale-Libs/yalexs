@@ -79,6 +79,7 @@ class ActivityStream(SubscriberMixin):
             task.cancel()
         self._update_tasks.clear()
         self._async_cancel_all_future_updates()
+        super().async_stop()
 
     def _async_cancel_future_updates(self, house_id: str) -> None:
         """Cancel future updates."""

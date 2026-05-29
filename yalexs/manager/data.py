@@ -328,6 +328,7 @@ class YaleXSData(SubscriberMixin):
                 await self._initial_sync_task
         if self._push_unsub:
             await self._push_unsub()
+        super().async_stop()
 
     @property
     def doorbells(self) -> ValuesView[Doorbell]:

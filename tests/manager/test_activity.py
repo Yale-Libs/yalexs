@@ -325,6 +325,34 @@ async def test_async_stop_cancels_tasks_and_future_updates() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_stop_cancels_mixin_interval_and_refresh_task() -> None:
+    """async_stop must release the SubscriberMixin interval timer and refresh task.
+
+    Without super().async_stop(), the mixin's call_later handle keeps firing
+    _async_scheduled_refresh after teardown, leaking timers across HA reloads.
+    """
+    stream, _api, _async_get = _build_stream()
+    # Subscribe so the mixin schedules its interval.
+    stream.async_subscribe_device_id("device1", MagicMock())
+    assert stream._unsub_interval is not None
+    # Simulate one scheduled refresh tick populating the mixin task.
+    stream._refresh_task = stream._loop.create_task(asyncio.sleep(60))
+
+    refresh_task = stream._refresh_task
+    interval = stream._unsub_interval
+
+    stream.async_stop()
+
+    assert stream._unsub_interval is None
+    # call_later handle must be cancelled to stop future ticks.
+    assert interval.cancelled()
+    # Drain the cancelled task.
+    with pytest.raises(asyncio.CancelledError):
+        await refresh_task
+    assert refresh_task.cancelled()
+
+
+@pytest.mark.asyncio
 async def test_async_refresh_skips_when_shutdown() -> None:
     """_async_refresh is a no-op once shutdown."""
     stream, _api, _async_get = _build_stream()
