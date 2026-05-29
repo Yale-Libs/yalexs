@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -88,26 +88,6 @@ def test_doorbell_detail_image_created_at_setter_rejects_non_date() -> None:
     now = datetime.datetime(2026, 5, 28, 12, 0, 0, tzinfo=datetime.timezone.utc)
     detail.image_created_at_datetime = now
     assert detail.image_created_at_datetime == now
-
-
-def test_doorbell_detail_get_doorbell_image_sync_uses_content_token() -> None:
-    """Synchronous get_doorbell_image issues a requests.get with the token header."""
-    detail = DoorbellDetail(json.loads(load_fixture("get_doorbell.battery_full.json")))
-    detail.image_url = "https://example.invalid/img.jpg"
-    detail.content_token = "tok-xyz"
-
-    fake_response = MagicMock()
-    fake_response.content = b"image-bytes"
-
-    with patch("yalexs.doorbell.requests.get", return_value=fake_response) as mocked:
-        result = detail.get_doorbell_image(timeout=2.5)
-
-    assert result == b"image-bytes"
-    mocked.assert_called_once_with(
-        "https://example.invalid/img.jpg",
-        timeout=2.5,
-        headers={"Authorization": "tok-xyz"},
-    )
 
 
 @pytest.mark.asyncio

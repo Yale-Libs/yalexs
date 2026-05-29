@@ -4,7 +4,6 @@ import datetime
 import logging
 from typing import Any
 
-import requests
 from aiohttp import ClientSession
 
 from yalexs.exceptions import ContentTokenExpired
@@ -182,11 +181,3 @@ class DoorbellDetail(DeviceDetail):
             )
             raise ContentTokenExpired
         return await response.read()
-
-    def get_doorbell_image(self, timeout: float = 10.0) -> bytes:
-        _LOGGER.debug("get_doorbell_image sync %s", self.device_name)
-        return requests.get(
-            self._image_url,
-            timeout=timeout,
-            headers={"Authorization": self._content_token or ""},
-        ).content
