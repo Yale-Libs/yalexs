@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.2.7 (2026-05-29)
+
+### Bug Fixes
+
+- **subscriber**: Skip scheduled refresh while prior task still running
+  ([#389](https://github.com/Yale-Libs/yalexs/pull/389),
+  [`f7b2182`](https://github.com/Yale-Libs/yalexs/commit/f7b21827e05bd16d1bdc0872ff1b3728e69fa68e))
+
+
 ## v9.2.6 (2026-05-29)
 
 ### Bug Fixes
