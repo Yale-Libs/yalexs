@@ -113,7 +113,6 @@ warn_unreachable = true
 warn_unused_ignores = true
 exclude = [
     'docs/.*',
-    'setup.py',
 ]
 
 [[tool.mypy.overrides]]
