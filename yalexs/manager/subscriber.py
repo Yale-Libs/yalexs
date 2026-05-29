@@ -69,7 +69,8 @@ class SubscriberMixin(ABC):
 
     def async_stop(self, *args: Any) -> None:  # noqa: ARG002
         """Cleanup on shutdown."""
-        self._refresh_task.cancel()
+        if self._refresh_task is not None:
+            self._refresh_task.cancel()
         self._async_cancel_update_interval()
 
     def async_unsubscribe_device_id(
