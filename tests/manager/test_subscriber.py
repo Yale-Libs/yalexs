@@ -153,6 +153,19 @@ async def test_async_stop_cancels_refresh_task_and_interval(
 
 
 @pytest.mark.asyncio
+async def test_async_stop_safe_before_any_refresh_scheduled() -> None:
+    # Shutdown can race the first interval tick: subscribe, then stop before
+    # _async_scheduled_refresh has ever populated _refresh_task. Must not raise.
+    sub = _Subscriber(timedelta(seconds=30))
+    sub.async_subscribe_device_id("lock1", MagicMock())
+    assert sub._refresh_task is None
+
+    sub.async_stop()
+    assert sub._unsub_interval is None
+    assert sub._refresh_task is None
+
+
+@pytest.mark.asyncio
 async def test_async_stop_accepts_arbitrary_args(
     freezer: FrozenDateTimeFactory,
 ) -> None:
