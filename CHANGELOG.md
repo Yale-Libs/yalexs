@@ -1,5 +1,112 @@
 # CHANGELOG
 
+<!-- version list -->
+
+## v9.2.4 (2026-05-29)
+
+### Bug Fixes
+
+- **api_async**: Pass subscriber_id to websocket get + add remove wrapper
+  ([#374](https://github.com/Yale-Libs/yalexs/pull/374),
+  [`bb0ce45`](https://github.com/Yale-Libs/yalexs/commit/bb0ce45c089e899a5d55111c3971335048587700))
+
+
+## v9.2.3 (2026-05-28)
+
+### Bug Fixes
+
+- **manager/data**: Cover YaleXSData lifecycle and image paths (48% → 99%)
+  ([#358](https://github.com/Yale-Libs/yalexs/pull/358),
+  [`aaac78f`](https://github.com/Yale-Libs/yalexs/commit/aaac78f62dfce77237a7096ec8b9bc155f01951e))
+
+
+## v9.2.2 (2026-05-28)
+
+### Bug Fixes
+
+- **pubnub**: Guard datetime.UTC on Py3.10 and unknown channel KeyError
+  ([#353](https://github.com/Yale-Libs/yalexs/pull/353),
+  [`9e7744b`](https://github.com/Yale-Libs/yalexs/commit/9e7744b6591d0de7771c0fc751e7e6477bd82d14))
+
+
+## v9.2.1 (2026-05-27)
+
+### Bug Fixes
+
+- Drop push messages for unknown device IDs instead of raising
+  ([#336](https://github.com/Yale-Libs/yalexs/pull/336),
+  [`c51a8be`](https://github.com/Yale-Libs/yalexs/commit/c51a8be6c7b1d8043707b53bdef00554a28222cf))
+
+- Replace deprecated datetime.utcfromtimestamp and datetime.utcnow
+  ([#340](https://github.com/Yale-Libs/yalexs/pull/340),
+  [`c18be76`](https://github.com/Yale-Libs/yalexs/commit/c18be768ad4d16312ea2cbfab538c495cf02fabc))
+
+
+## v9.2.0 (2025-09-18)
+
+### Features
+
+- Add unified lock operation method to reduce code duplication
+  ([#307](https://github.com/Yale-Libs/yalexs/pull/307),
+  [`41c806d`](https://github.com/Yale-Libs/yalexs/commit/41c806d6c0e66d390f5a6da15eec0e5f2713ca6a))
+
+
+## v9.1.0 (2025-09-16)
+
+### Features
+
+- Add support for capabilities endpoint
+  ([#306](https://github.com/Yale-Libs/yalexs/pull/306),
+  [`9ce477a`](https://github.com/Yale-Libs/yalexs/commit/9ce477a1a2e3a8e20da45f8bbaf108782d8f6513))
+
+
+## v9.0.1 (2025-08-27)
+
+### Bug Fixes
+
+- Process newer status updates even when lock state unchanged
+  ([#300](https://github.com/Yale-Libs/yalexs/pull/300),
+  [`3f44708`](https://github.com/Yale-Libs/yalexs/commit/3f44708a4c41f59d5b9c3db37e410c8085fcd324))
+
+
+## v9.0.0 (2025-08-27)
+
+### Bug Fixes
+
+- Drop broken Python 3.9 support
+  ([#299](https://github.com/Yale-Libs/yalexs/pull/299),
+  [`231eb0f`](https://github.com/Yale-Libs/yalexs/commit/231eb0f73bdf0a8a869245b54f83569a2faec7fd))
+
+### Breaking Changes
+
+- Drop broken Python 3.9 support. Minimum supported Python is now 3.10.
+
+
+## v8.12.1 (2025-08-27)
+
+### Bug Fixes
+
+- Reduce excessive activity API calls and fix manual lock detection for Yale/August locks
+  ([#298](https://github.com/Yale-Libs/yalexs/pull/298),
+  [`eacca3d`](https://github.com/Yale-Libs/yalexs/commit/eacca3d4b352a33c7485fcb0348629a858766c90))
+
+
+## v8.12.0 (2025-08-23)
+
+### Features
+
+- Add Yale August branding
+  ([#294](https://github.com/Yale-Libs/yalexs/pull/294),
+  [`7f3fcde`](https://github.com/Yale-Libs/yalexs/commit/7f3fcde909ca02876a15aa013ac32e13852b193e))
+
+
+## v8.11.1 (2025-08-05)
+
+### Bug Fixes
+
+- Reduce excessive activity API calls for August and Yale locks
+  ([#283](https://github.com/Yale-Libs/yalexs/pull/283),
+  [`4f77fbd`](https://github.com/Yale-Libs/yalexs/commit/4f77fbd7dc0bd75f0f7a70bdccbcec28f6158c67))
 
 
 ## v8.11.0 (2025-01-20)
