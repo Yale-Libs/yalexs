@@ -49,6 +49,10 @@ class SubscriberMixin(ABC):
             self._update_interval_seconds,
             self._async_scheduled_refresh,
         )
+        if self._refresh_task is not None and not self._refresh_task.done():
+            # Previous refresh still in flight — skip this tick rather than
+            # orphan the prior task and mutate shared state concurrently.
+            return
         self._refresh_task = create_eager_task(
             self._async_refresh(), loop=self._loop, name=f"{self} schedule refresh"
         )
