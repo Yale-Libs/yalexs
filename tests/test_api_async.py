@@ -47,6 +47,7 @@ from yalexs.api_common import (
     API_VALIDATE_VERIFICATION_CODE_URLS,
     API_WAKEUP_DOORBELL_URL,
     API_WEBSOCKET_SUBSCRIBERS,
+    API_WEBSOCKET_SUBSCRIBERS_WITH_SUBSCRIBER_ID,
     HYPER_BRIDGE_PARAM,
     ApiCommon,
 )
@@ -1692,6 +1693,37 @@ async def test_async_add_websocket_subscription(
         api = ApiAsync(session)
         result = await api.async_add_websocket_subscription(ACCESS_TOKEN)
         assert result == {"subscriberId": "sub-1"}
+
+
+@pytest.mark.asyncio
+async def test_async_get_websocket_subscriptions(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.get(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(
+            API_WEBSOCKET_SUBSCRIBERS_WITH_SUBSCRIBER_ID.format(subscriber_id="sub-1")
+        ),
+        body="payload-body",
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session)
+        result = await api.async_get_websocket_subscriptions(ACCESS_TOKEN, "sub-1")
+        assert result == "payload-body"
+
+
+@pytest.mark.asyncio
+async def test_async_remove_websocket_subscription(
+    mock_aioresponse: aioresponses,
+) -> None:
+    mock_aioresponse.delete(
+        ApiCommon(DEFAULT_BRAND).get_brand_url(
+            API_WEBSOCKET_SUBSCRIBERS_WITH_SUBSCRIBER_ID.format(subscriber_id="sub-1")
+        ),
+        status=204,
+    )
+    async with ClientSession() as session:
+        api = ApiAsync(session)
+        await api.async_remove_websocket_subscription(ACCESS_TOKEN, "sub-1")
 
 
 # ---------------------------------------------------------------------------
