@@ -74,6 +74,8 @@ class SocketIORunner:
         @sio.event
         def disconnect() -> None:
             _LOGGER.debug("disconnected from server")
+            if self._refresh_task is not None and not self._refresh_task.done():
+                self._refresh_task.cancel()
             self._refresh_task = create_eager_task(self._refresh_access_token())
             self.connected = False
 
@@ -105,6 +107,10 @@ class SocketIORunner:
             self._listeners.clear()
             with suppress(asyncio.CancelledError):
                 await socketio_task
+            if self._refresh_task is not None and not self._refresh_task.done():
+                self._refresh_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._refresh_task
             _LOGGER.debug("socketio stopped")
 
         return _async_unsub
