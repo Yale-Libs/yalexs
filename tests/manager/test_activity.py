@@ -275,6 +275,26 @@ async def test_get_latest_device_activity_missing_type_returns_other() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_latest_device_activity_skips_older_after_newer() -> None:
+    """When iteration sees the newer entry first, the older one hits the continue branch."""
+    stream, *_ = _build_stream()
+    now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    newer = _make_activity(
+        "dev", ActivityType.DOOR_OPERATION, now + timedelta(seconds=10)
+    )
+    older = _make_activity("dev", ActivityType.LOCK_OPERATION, now)
+    stream._latest_activities["dev"][ActivityType.DOOR_OPERATION] = newer
+    stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = older
+
+    # Pass an ordered list (newer first) so the older entry deterministically
+    # triggers the `<= latest_activity.activity_start_time` continue branch.
+    result = stream.get_latest_device_activity(
+        "dev", [ActivityType.DOOR_OPERATION, ActivityType.LOCK_OPERATION]
+    )
+    assert result is newer
+
+
+@pytest.mark.asyncio
 async def test_async_stop_cancels_tasks_and_future_updates() -> None:
     """async_stop cancels pending tasks and scheduled callbacks, sets shutdown."""
     stream, _api, async_get = _build_stream()

@@ -1689,6 +1689,24 @@ async def test_refresh_device_detail_by_id_doorbell_branch() -> None:
 
 
 @pytest.mark.asyncio
+async def test_refresh_device_detail_by_id_unknown_device_only_signals() -> None:
+    """device_id in neither locks nor doorbells falls straight to the signal call."""
+    gateway = _make_gateway()
+    data = MockYaleXSData(gateway)
+    data._locks_by_id = {}
+    data._doorbells_by_id = {}
+
+    with (
+        patch.object(data, "_async_update_device_detail", new=AsyncMock()) as inner,
+        patch.object(data, "async_signal_device_id_update") as signal,
+    ):
+        await data._async_refresh_device_detail_by_id("ghost")
+
+    inner.assert_not_awaited()
+    signal.assert_called_once_with("ghost")
+
+
+@pytest.mark.asyncio
 async def test_async_update_device_detail_happy_path_stores_detail() -> None:
     gateway = _make_gateway()
     data = MockYaleXSData(gateway)
