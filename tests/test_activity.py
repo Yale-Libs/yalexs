@@ -52,6 +52,7 @@ from yalexs.activity import (
     ACTION_RF_SECURE,
     ACTION_RF_UNLATCH,
     ACTION_RF_UNLOCK,
+    ACTION_TO_CLASS,
     ACTIVITY_ACTION_STATES,
     ACTIVITY_ACTIONS_BRIDGE_OPERATION,
     ACTIVITY_ACTIONS_DOOR_OPERATION,
@@ -69,6 +70,7 @@ from yalexs.activity import (
     DoorbellImageCaptureActivity,
     DoorbellMotionActivity,
     DoorbellViewActivity,
+    DoorOperationActivity,
     LockOperationActivity,
 )
 from yalexs.api_async import ApiAsync
@@ -759,3 +761,33 @@ def test_operator_thumbnail_filled_from_image_url() -> None:
     )
     assert activity.operator_image_url == "https://from-dict"
     assert activity.operator_thumbnail_url == "https://from-dict"
+
+
+def test_lock_operation_actions_all_have_a_state() -> None:
+    """Every lock-operation action must map to a state.
+
+    ``util.update_lock_detail_from_activity`` looks up
+    ``ACTIVITY_ACTION_STATES[activity.action]`` for any ``LockOperationActivity``.
+    A lock-operation action without a state entry would raise ``KeyError`` on a
+    real device push, so the two structures must stay in sync.
+    """
+    missing = ACTIVITY_ACTIONS_LOCK_OPERATION - set(ACTIVITY_ACTION_STATES)
+    assert missing == set(), f"lock-operation actions missing a state: {missing}"
+
+    # Guard the dispatch path too: each such action must build a
+    # LockOperationActivity, the class that triggers the state lookup.
+    for action in ACTIVITY_ACTIONS_LOCK_OPERATION:
+        assert ACTION_TO_CLASS[action] is LockOperationActivity
+
+
+def test_door_operation_actions_all_have_a_state() -> None:
+    """Every door-operation action must map to a state.
+
+    ``util.update_lock_detail_from_activity`` looks up
+    ``ACTIVITY_ACTION_STATES[activity.action]`` for any ``DoorOperationActivity``.
+    """
+    missing = ACTIVITY_ACTIONS_DOOR_OPERATION - set(ACTIVITY_ACTION_STATES)
+    assert missing == set(), f"door-operation actions missing a state: {missing}"
+
+    for action in ACTIVITY_ACTIONS_DOOR_OPERATION:
+        assert ACTION_TO_CLASS[action] is DoorOperationActivity
