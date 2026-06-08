@@ -16,11 +16,11 @@ The public API key historically embedded in this library is no longer accepted b
 
 Several capabilities that exist in the official Yale Access / August apps are **not** available through this library, because the vendor either blocks them for third-party API keys or has never published a write contract. These recur in the issue tracker; the short answer is that they cannot be implemented blind:
 
-| Capability | Status | Reference |
-| ---------- | ------ | --------- |
-| Doorbell video / camera (`/doorbells/{id}/videoevent`, `/doorbells/{id}/kvscredentials`) | Returns `NotAuthorized` — *"endpoint not allowed for API key"* on the global Yale branding. | [#293](https://github.com/Yale-Libs/yalexs/issues/293) |
-| Privacy-mode toggle | No documented API endpoint; not exposed by the app's public surface. | [#290](https://github.com/Yale-Libs/yalexs/issues/290) |
-| Add / remove user PIN codes | Read-only here: only `async_get_pins` (`GET /locks/{id}/pins`) exists. No documented POST/PUT/DELETE contract for slot writes. | [#78](https://github.com/Yale-Libs/yalexs/issues/78) |
+| Capability                                                                               | Status                                                                                                                         | Reference                                              |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| Doorbell video / camera (`/doorbells/{id}/videoevent`, `/doorbells/{id}/kvscredentials`) | Returns `NotAuthorized` — _"endpoint not allowed for API key"_ on the global Yale branding.                                    | [#293](https://github.com/Yale-Libs/yalexs/issues/293) |
+| Privacy-mode toggle                                                                      | No documented API endpoint; not exposed by the app's public surface.                                                           | [#290](https://github.com/Yale-Libs/yalexs/issues/290) |
+| Add / remove user PIN codes                                                              | Read-only here: only `async_get_pins` (`GET /locks/{id}/pins`) exists. No documented POST/PUT/DELETE contract for slot writes. | [#78](https://github.com/Yale-Libs/yalexs/issues/78)   |
 
 If Yale publishes (or you can reverse-engineer with a valid partner key) the request shape for any of these, contributions are welcome.
 
