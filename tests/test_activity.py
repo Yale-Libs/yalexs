@@ -3,7 +3,6 @@ import os
 import unittest
 
 from aiohttp import ClientSession
-from aioresponses import aioresponses
 
 from yalexs.activity import (
     ACTION_BRIDGE_OFFLINE,
@@ -76,6 +75,8 @@ from yalexs.api_common import API_GET_LOCK_URL, ApiCommon
 from yalexs.const import DEFAULT_BRAND
 from yalexs.lock import LockDoorStatus, LockStatus
 from yalexs.time import epoch_to_datetime
+
+from .common import aiointercept
 
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
 
@@ -479,7 +480,7 @@ class TestActivityApiAsync(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(session.close)
         return session
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_detail_bridge_online(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
