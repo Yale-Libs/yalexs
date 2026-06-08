@@ -1,3 +1,4 @@
+import inspect
 import logging
 import os
 import unittest
@@ -1358,10 +1359,21 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         assert user_details == {"UserID": "abc"}
 
 
+# aiohttp 3.14 added a required keyword-only ``stream_writer`` argument to
+# ClientResponse alongside the existing ``writer`` (aio-libs/aiohttp#12815),
+# so direct construction with only ``writer=`` raises TypeError. Detect the
+# parameter from the actual signature and supply it when present, so
+# MockedResponse works on both the pinned aiohttp and the 3.14 bump without a
+# hardcoded version check. Inert on 3.13, where ``stream_writer`` is absent.
+_CLIENT_RESPONSE_PARAMS = set(inspect.signature(ClientResponse.__init__).parameters)
+
+
 class MockedResponse(ClientResponse):
     def __init__(self, *args, **kwargs):
         content = kwargs.pop("content", None)
         status = kwargs.pop("status", None)
+        if "stream_writer" in _CLIENT_RESPONSE_PARAMS:
+            kwargs.setdefault("stream_writer", mock.Mock())
         super().__init__(*args, **kwargs)
         self._mocked_content = content
         self._mocked_status = status
