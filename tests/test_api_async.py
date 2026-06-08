@@ -1,3 +1,4 @@
+import inspect
 import logging
 import os
 import unittest
@@ -7,9 +8,10 @@ from unittest.mock import patch
 
 import dateutil.parser
 import pytest
+import pytest_asyncio
 from aiohttp import ClientOSError, ClientResponse, ClientSession
 from aiohttp.helpers import TimerNoop
-from aioresponses import CallbackResult, aioresponses
+from aiointercept import CallbackResult
 from dateutil.tz import tzlocal, tzutc
 from yarl import URL
 
@@ -66,6 +68,8 @@ from yalexs.exceptions import (
 )
 from yalexs.lock import LockDoorStatus, LockStatus
 
+from .common import aiointercept
+
 ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
 
 
@@ -80,9 +84,9 @@ def utc_of(year, month, day, hour, minute, second, microsecond):
     return datetime(year, month, day, hour, minute, second, microsecond, tzinfo=tzutc())
 
 
-@pytest.fixture
-def mock_aioresponse():
-    with aioresponses() as m:
+@pytest_asyncio.fixture
+async def mock_aioresponse():
+    async with aiointercept() as m:
         yield m
 
 
@@ -93,7 +97,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(session.close)
         return session
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_doorbells(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_DOORBELLS_URL),
@@ -125,7 +129,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("https://image.com/vmk16naaaa7ibuey7sar.jpg", second.image_url)
         self.assertEqual("3dd2accaea08", second.house_id)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_doorbell_detail(self, mock):
         expected_doorbell_image_url = "https://image.com/vmk16naaaa7ibuey7sar.jpg"
         mock.get(
@@ -160,7 +164,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             b"doorbell_image_mocked",
         )
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_doorbell_image_token_expired(self, mock):
         expected_doorbell_image_url = "https://image.com/vmk16naaaa7ibuey7sar.jpg"
 
@@ -178,7 +182,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ContentTokenExpired):
             await doorbell.async_get_doorbell_image(self._new_session())
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_doorbell_detail_missing_image(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -203,7 +207,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(True, doorbell.has_subscription)
         self.assertEqual(None, doorbell.image_url)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_doorbell_offline(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -232,7 +236,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("https://res.cloudinary.com/x.jpg", doorbell.image_url)
         self.assertEqual("hydra1", doorbell.model)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_doorbell_gen2_full_battery_detail(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -246,7 +250,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(100, doorbell.battery_level)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_doorbell_gen2_medium_battery_detail(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -260,7 +264,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(75, doorbell.battery_level)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_doorbell_gen2_low_battery_detail(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -274,7 +278,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(10, doorbell.battery_level)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_locks(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_LOCKS_URL),
@@ -300,7 +304,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("000000000011", second.house_id)
         self.assertEqual(False, second.is_operable)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_locks_yale_home_brand(self, mock):
         mock.get(
             ApiCommon(Brand.YALE_HOME).get_brand_url(API_GET_LOCKS_URL),
@@ -326,7 +330,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("000000000011", second.house_id)
         self.assertEqual(False, second.is_operable)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_operable_locks(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_LOCKS_URL),
@@ -344,7 +348,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("000000000000", first.house_id)
         self.assertEqual(True, first.is_operable)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_detail_with_doorsense_bridge_online(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -380,7 +384,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             dateutil.parser.parse("2017-12-10T04:48:30.272Z"), lock.door_state_datetime
         )
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_detail_with_doorsense_disabled_bridge_online(
         self, mock
     ):
@@ -419,7 +423,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             dateutil.parser.parse("2017-12-10T04:48:30.272Z"), lock.door_state_datetime
         )
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_detail_bridge_online(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -460,7 +464,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
             dateutil.parser.parse("2017-12-10T04:48:30.272Z"), lock.door_state_datetime
         )
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_with_doorbell(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -477,7 +481,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         assert lock.doorbell is True
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_with_unlatch(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -493,7 +497,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         assert lock.unlatch_supported is True
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_capabilities(self, mock):
         capabilities_response = {
             "lock": {
@@ -543,7 +547,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(capabilities, capabilities_response)
         self.assertTrue(capabilities["lock"]["unlatch"])
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_v2_lock_detail_bridge_online(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -603,7 +607,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lock.offline_slot, 1)
         self.assertEqual(lock.mac_address, "SNIP")
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_detail_bridge_offline(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -632,7 +636,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(None, lock.lock_status_datetime)
         self.assertEqual(None, lock.door_state_datetime)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_detail_doorsense_init_state(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND)
@@ -689,7 +693,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         )
         assert isinstance(lock.raw, dict)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_status_with_locked_response(self, mock):
         lock_id = 1234
         mock.get(
@@ -704,7 +708,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockStatus.LOCKED, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_and_door_status_with_locked_response(self, mock):
         lock_id = 1234
         mock.get(
@@ -723,7 +727,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(LockStatus.LOCKED, status)
         self.assertEqual(LockDoorStatus.CLOSED, door_status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_status_with_unlocked_response(self, mock):
         lock_id = 1234
         mock.get(
@@ -738,7 +742,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockStatus.UNLOCKED, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_status_with_unknown_status_response(self, mock):
         lock_id = 1234
         mock.get(
@@ -753,7 +757,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockStatus.UNKNOWN, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_door_status_with_closed_response(self, mock):
         lock_id = 1234
         mock.get(
@@ -768,7 +772,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockDoorStatus.CLOSED, door_status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_door_status_with_open_response(self, mock):
         lock_id = 1234
         mock.get(
@@ -783,7 +787,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockDoorStatus.OPEN, door_status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_and_door_status_with_open_response(self, mock):
         lock_id = 1234
         mock.get(
@@ -802,7 +806,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(LockDoorStatus.OPEN, door_status)
         self.assertEqual(LockStatus.UNLOCKED, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_lock_door_status_with_unknown_response(self, mock):
         lock_id = 1234
         mock.get(
@@ -817,7 +821,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockDoorStatus.UNKNOWN, door_status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_lock_from_fixture(self, mock):
         lock_id = 1234
         mock.put(
@@ -832,7 +836,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockStatus.LOCKED, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlock_from_fixture(self, mock):
         lock_id = 1234
         mock.put(
@@ -847,7 +851,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockStatus.UNLOCKED, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_lock_return_activities_from_fixture(self, mock):
         lock_id = 1234
         mock.put(
@@ -879,7 +883,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(activities[0].activity_start_time, expected_lock_dt)
         self.assertEqual(activities[0].activity_end_time, expected_lock_dt)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlatch_return_activities_from_fixture(self, mock):
         lock_id = 1234
         mock.put(
@@ -911,7 +915,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(activities[1].activity_start_time, expected_unlatch_dt)
         self.assertEqual(activities[1].activity_end_time, expected_unlatch_dt)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlock_return_activities_from_fixture(self, mock):
         lock_id = 1234
         mock.put(
@@ -943,7 +947,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(activities[1].activity_start_time, expected_unlock_dt)
         self.assertEqual(activities[1].activity_end_time, expected_unlock_dt)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_lock_return_activities_from_fixture_with_no_doorstate(
         self, mock
     ):
@@ -971,7 +975,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(activities[0].activity_start_time, expected_lock_dt)
         self.assertEqual(activities[0].activity_end_time, expected_lock_dt)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlatch_return_activities_from_fixture_with_no_doorstate(
         self, mock
     ):
@@ -999,7 +1003,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(activities[0].activity_start_time, expected_unlatch_dt)
         self.assertEqual(activities[0].activity_end_time, expected_unlatch_dt)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlock_return_activities_from_fixture_with_no_doorstate(
         self, mock
     ):
@@ -1027,7 +1031,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(activities[0].activity_start_time, expected_unlock_dt)
         self.assertEqual(activities[0].activity_end_time, expected_unlock_dt)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_lock(self, mock):
         lock_id = 1234
         mock.put(
@@ -1045,7 +1049,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockStatus.LOCKED, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_lock_async_old_bridge(self, mock):
         lock_id = 1234
         mock.put(
@@ -1057,7 +1061,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         api = ApiAsync(self._new_session())
         await api.async_lock_async(ACCESS_TOKEN, lock_id, hyper_bridge=False)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_lock_async_new_bridge(self, mock):
         lock_id = 1234
         base_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_LOCK_ASYNC_URL)
@@ -1066,7 +1070,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         api = ApiAsync(self._new_session())
         await api.async_lock_async(ACCESS_TOKEN, lock_id)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlatch(self, mock):
         lock_id = 1234
         mock.put(
@@ -1081,7 +1085,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockStatus.UNLATCHED, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlatch_async_old_bridge(self, mock):
         lock_id = 1234
 
@@ -1094,7 +1098,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         api = ApiAsync(self._new_session())
         await api.async_unlatch_async(ACCESS_TOKEN, lock_id, hyper_bridge=False)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlatch_async_new_bridge(self, mock):
         lock_id = 1234
         base_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_UNLATCH_ASYNC_URL)
@@ -1103,7 +1107,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         api = ApiAsync(self._new_session())
         await api.async_unlatch_async(ACCESS_TOKEN, lock_id, hyper_bridge=True)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlock(self, mock):
         lock_id = 1234
         mock.put(
@@ -1118,7 +1122,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(LockStatus.UNLOCKED, status)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlock_async_old_bridge(self, mock):
         lock_id = 1234
 
@@ -1131,7 +1135,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         api = ApiAsync(self._new_session())
         await api.async_unlock_async(ACCESS_TOKEN, lock_id, hyper_bridge=False)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_unlock_async_new_bridge(self, mock):
         lock_id = 1234
         base_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_UNLOCK_ASYNC_URL)
@@ -1140,7 +1144,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         api = ApiAsync(self._new_session())
         await api.async_unlock_async(ACCESS_TOKEN, lock_id, hyper_bridge=True)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_status_async_old_bridge(self, mock):
         lock_id = 1234
 
@@ -1153,7 +1157,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         api = ApiAsync(self._new_session())
         await api.async_status_async(ACCESS_TOKEN, lock_id, hyper_bridge=False)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_status_async_new_bridge(self, mock):
         lock_id = 1234
         base_url = ApiCommon(DEFAULT_BRAND).get_brand_url(API_STATUS_ASYNC_URL)
@@ -1162,7 +1166,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         api = ApiAsync(self._new_session())
         await api.async_status_async(ACCESS_TOKEN, lock_id)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_pins(self, mock):
         lock_id = 1234
         mock.get(
@@ -1195,7 +1199,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(utc_of(2018, 12, 1, 1, 1, 1, 563000), first.access_end_time)
         self.assertEqual(utc_of(2018, 11, 5, 10, 2, 41, 684000), first.access_times)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_house_activities(self, mock):
         house_id = 1234
 
@@ -1223,7 +1227,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(activities[8], yalexs.activity.LockOperationActivity)
         self.assertIsInstance(activities[9], yalexs.activity.LockOperationActivity)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_retry_raises_our_exception_class(self, mock):
         house_id = 1234
 
@@ -1242,7 +1246,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         ):
             await api.async_get_house_activities(ACCESS_TOKEN, house_id)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_refresh_access_token(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
@@ -1254,7 +1258,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         new_token = await api.async_refresh_access_token("token")
         assert new_token == "xyz"
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_validate_verification_code(self, mock):
         last_args = {}
 
@@ -1343,7 +1347,7 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
                 _raise_response_exceptions(mocked_response)
             self.assertIn("Verify brand is correct", str(ctx.exception))
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_usern(self, mock):
         mock.get(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_USER_URL),
@@ -1355,10 +1359,21 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         assert user_details == {"UserID": "abc"}
 
 
+# aiohttp 3.14 added a required keyword-only ``stream_writer`` argument to
+# ClientResponse alongside the existing ``writer`` (aio-libs/aiohttp#12815),
+# so direct construction with only ``writer=`` raises TypeError. Detect the
+# parameter from the actual signature and supply it when present, so
+# MockedResponse works on both the pinned aiohttp and the 3.14 bump without a
+# hardcoded version check. Inert on 3.13, where ``stream_writer`` is absent.
+_CLIENT_RESPONSE_PARAMS = set(inspect.signature(ClientResponse.__init__).parameters)
+
+
 class MockedResponse(ClientResponse):
     def __init__(self, *args, **kwargs):
         content = kwargs.pop("content", None)
         status = kwargs.pop("status", None)
+        if "stream_writer" in _CLIENT_RESPONSE_PARAMS:
+            kwargs.setdefault("stream_writer", mock.Mock())
         super().__init__(*args, **kwargs)
         self._mocked_content = content
         self._mocked_status = status
@@ -1382,7 +1397,7 @@ class MockedResponse(ClientResponse):
 )
 @pytest.mark.asyncio
 async def test_retry_exhausts_all_attempts(
-    status_code: int, mock_aioresponse: aioresponses
+    status_code: int, mock_aioresponse: aiointercept
 ) -> None:
     """All attempts return a retryable status; loop exits via the while condition."""
     attempt = 0
@@ -1417,7 +1432,7 @@ async def test_retry_exhausts_all_attempts(
 
 @pytest.mark.asyncio
 async def test_async_dict_to_api_preserves_existing_headers(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     """When headers are pre-populated, _async_dict_to_api must not overwrite them."""
     custom_headers = {"X-Custom-Header": "preserve-me"}
@@ -1440,7 +1455,10 @@ async def test_async_dict_to_api_preserves_existing_headers(
         response = await api._async_dict_to_api(api_dict)
 
     assert response.status == 200
-    assert captured["headers"] == custom_headers
+    # aiointercept performs a real round-trip, so the captured request also
+    # carries aiohttp's standard headers (Host, User-Agent, ...). Assert the
+    # custom header survived rather than exact-matching the full header set.
+    assert custom_headers.items() <= captured["headers"].items()
 
 
 @pytest.mark.parametrize(
@@ -1448,7 +1466,7 @@ async def test_async_dict_to_api_preserves_existing_headers(
     [502, 429],
 )
 @pytest.mark.asyncio
-async def test_retry_502_429(status_code: int, mock_aioresponse: aioresponses) -> None:
+async def test_retry_502_429(status_code: int, mock_aioresponse: aiointercept) -> None:
     last_args = {}
     attempt = 0
 
@@ -1643,7 +1661,7 @@ _ALARM_DEVICE_DICT = {
 
 @pytest.mark.asyncio
 async def test_async_get_alarms_returns_alarms(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(Brand.YALE_GLOBAL).get_brand_url(API_GET_ALARMS_URL),
@@ -1658,7 +1676,7 @@ async def test_async_get_alarms_returns_alarms(
 
 @pytest.mark.asyncio
 async def test_async_get_alarm_devices_returns_devices(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(Brand.YALE_GLOBAL).get_brand_url(
@@ -1676,7 +1694,7 @@ async def test_async_get_alarm_devices_returns_devices(
 
 @pytest.mark.asyncio
 async def test_async_arm_alarm_posts_state_and_returns_json(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     alarm = Alarm("alarm-1", _ALARM_DICT)
     url = ApiCommon(Brand.YALE_GLOBAL).get_brand_url(
@@ -1697,7 +1715,7 @@ async def test_async_arm_alarm_posts_state_and_returns_json(
 
 @pytest.mark.asyncio
 async def test_async_wakeup_doorbell_returns_true(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(DEFAULT_BRAND).get_brand_url(
@@ -1712,7 +1730,7 @@ async def test_async_wakeup_doorbell_returns_true(
 
 @pytest.mark.asyncio
 async def test_async_get_houses_returns_response(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
@@ -1727,7 +1745,7 @@ async def test_async_get_houses_returns_response(
 
 @pytest.mark.asyncio
 async def test_async_get_house_returns_dict(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSE_URL.format(house_id="h1")),
@@ -1743,7 +1761,7 @@ async def test_async_get_house_returns_dict(
 
 @pytest.mark.asyncio
 async def test_refresh_access_token_prefers_access_token_header(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
@@ -1760,7 +1778,7 @@ async def test_refresh_access_token_prefers_access_token_header(
 
 @pytest.mark.asyncio
 async def test_refresh_access_token_falls_back_to_august_header(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
@@ -1774,7 +1792,7 @@ async def test_refresh_access_token_falls_back_to_august_header(
 
 @pytest.mark.asyncio
 async def test_async_add_websocket_subscription(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.post(
         ApiCommon(DEFAULT_BRAND).get_brand_url(API_WEBSOCKET_SUBSCRIBERS),
@@ -1788,7 +1806,7 @@ async def test_async_add_websocket_subscription(
 
 @pytest.mark.asyncio
 async def test_async_get_websocket_subscriptions(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(DEFAULT_BRAND).get_brand_url(
@@ -1804,7 +1822,7 @@ async def test_async_get_websocket_subscriptions(
 
 @pytest.mark.asyncio
 async def test_async_remove_websocket_subscription(
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.delete(
         ApiCommon(DEFAULT_BRAND).get_brand_url(
@@ -1825,7 +1843,7 @@ async def test_async_remove_websocket_subscription(
 @pytest.mark.asyncio
 async def test_debug_logging_does_not_break_request(
     caplog: pytest.LogCaptureFixture,
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     mock_aioresponse.get(
         ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_USER_URL),

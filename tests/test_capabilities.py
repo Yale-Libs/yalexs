@@ -4,13 +4,14 @@ from typing import Any
 
 import pytest
 from aiohttp import ClientSession
-from aioresponses import aioresponses
 
 from yalexs.api_async import ApiAsync
 from yalexs.api_common import API_GET_CAPABILITIES_URL, ApiCommon
 from yalexs.capabilities import CapabilitiesResponse
 from yalexs.const import DEFAULT_BRAND
 from yalexs.lock import LockDetail
+
+from .common import aiointercept
 
 ACCESS_TOKEN = "test-token"
 
@@ -53,7 +54,7 @@ async def test_async_get_device_capabilities() -> None:
 
     serial_number = "TEST123"
 
-    with aioresponses() as mock:
+    async with aiointercept() as mock:
         mock.get(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_CAPABILITIES_URL)
             + f"?serialNumber={serial_number}&topLevelHost=true",

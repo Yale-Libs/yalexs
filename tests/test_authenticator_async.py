@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 import aiofiles
 import pytest
+import pytest_asyncio
 from aiohttp import ClientError, ClientSession
-from aioresponses import aioresponses
 from dateutil.tz import tzutc
 
 from yalexs.api_async import ApiAsync
@@ -26,6 +26,8 @@ from yalexs.authenticator_async import (
     ValidationResult,
 )
 from yalexs.const import DEFAULT_BRAND, HEADER_AUGUST_ACCESS_TOKEN, Brand
+
+from .common import aiointercept
 
 
 def format_datetime(dt):
@@ -74,7 +76,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_should_refresh_when_token_expiry_is_after_renewal_threshold(
         self, mock_aioresponses
     ):
@@ -92,7 +94,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(True, should_refresh)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_should_refresh_when_token_expiry_is_before_renewal_threshold(
         self, mock_aioresponses
     ):
@@ -110,7 +112,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(False, should_refresh)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_refresh_token(self, mock_aioresponses):
         self._setup_session_response(mock_aioresponses, True, True)
 
@@ -132,7 +134,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
             access_token.parsed_expiration_time(),
         )
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_session_with_authenticated_response(
         self, mock_aioresponses
     ):
@@ -145,7 +147,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("install_id", authentication.install_id)
         self.assertEqual(AuthenticationState.AUTHENTICATED, authentication.state)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_session_with_bad_password_response(
         self, mock_aioresponses
     ):
@@ -158,7 +160,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("install_id", authentication.install_id)
         self.assertEqual(AuthenticationState.BAD_PASSWORD, authentication.state)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_session_with_requires_validation_response(
         self, mock_aioresponses
     ):
@@ -171,7 +173,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("install_id", authentication.install_id)
         self.assertEqual(AuthenticationState.REQUIRES_VALIDATION, authentication.state)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_get_session_with_already_authenticated_state(
         self, mock_aioresponses
     ):
@@ -187,7 +189,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("install_id", authentication.install_id)
         self.assertEqual(AuthenticationState.AUTHENTICATED, authentication.state)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_send_verification_code(self, mock_aioresponses):
         self._setup_session_response(mock_aioresponses, True, False)
 
@@ -203,7 +205,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(True, result)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_validate_verification_code_with_no_code(
         self, mock_aioresponses
     ):
@@ -222,7 +224,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ValidationResult.INVALID_VERIFICATION_CODE, result)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_validate_verification_code_with_validated_response(
         self, mock_aioresponses
     ):
@@ -241,7 +243,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ValidationResult.VALIDATED, result)
 
-    @aioresponses()
+    @aiointercept()
     async def test_async_validate_verification_code_with_invalid_code_response(
         self, mock_aioresponses
     ):
@@ -267,9 +269,9 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def mock_aioresponse() -> aioresponses:
-    with aioresponses() as m:
+@pytest_asyncio.fixture
+async def mock_aioresponse() -> aiointercept:
+    async with aiointercept() as m:
         yield m
 
 
@@ -384,7 +386,7 @@ async def test_setup_authentication_with_soon_expiring_cache_warns(
 @pytest.mark.asyncio
 async def test_authenticate_writes_cache_file(
     cache_path: str,
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     # Round-trip: a successful authenticate() should persist to disk.
     expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).strftime(
@@ -449,7 +451,7 @@ async def test_refresh_short_circuits_when_not_authenticated(
 @pytest.mark.asyncio
 async def test_refresh_no_op_when_refresh_not_needed(
     cache_path: str,
-    mock_aioresponse: aioresponses,
+    mock_aioresponse: aiointercept,
 ) -> None:
     # Authenticate with a far-future expiration, then refresh(force=False)
     # should short-circuit without calling the API.
