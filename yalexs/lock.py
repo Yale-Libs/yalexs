@@ -173,7 +173,7 @@ class LockDetail(DeviceDetail):
     @lock_status.setter
     def lock_status(self, var):
         """Update the lock status (usually form the activity log)."""
-        if var not in LockStatus:
+        if not isinstance(var, LockStatus):
             raise ValueError
         self._lock_status = var
 
@@ -195,7 +195,7 @@ class LockDetail(DeviceDetail):
     @door_state.setter
     def door_state(self, var):
         """Update the door state (usually form the activity log)."""
-        if var not in LockDoorStatus:
+        if not isinstance(var, LockDoorStatus):
             raise ValueError
         self._door_state = var
         if var != LockDoorStatus.UNKNOWN:
