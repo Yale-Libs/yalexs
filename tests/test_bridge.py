@@ -53,6 +53,20 @@ def test_bridge_detail_status_is_none_when_payload_omits_it() -> None:
     assert bridge.hyper_bridge is False
 
 
+def test_bridge_detail_optional_fields_are_none() -> None:
+    """Bridges carry no name, serial number or pubsub channel.
+
+    ``BridgeDetail`` passes ``None`` for these to ``DeviceDetail.__init__``,
+    so the public accessors must surface ``None`` rather than a string. This
+    guards the ``str | None`` contract relied on by typed consumers.
+    """
+    bridge = BridgeDetail("house-1", _bridge_data())
+
+    assert bridge.device_name is None
+    assert bridge.serial_number is None
+    assert bridge.pubsub_channel is None
+
+
 def test_bridge_status_detail_unknown_when_current_missing_or_offline() -> None:
     """Anything other than ``current == "online"`` maps to UNKNOWN at construction."""
     assert BridgeStatusDetail({}).current is BridgeStatus.UNKNOWN
