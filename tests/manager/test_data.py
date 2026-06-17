@@ -558,7 +558,7 @@ async def test_fetch_lock_capabilities() -> None:
 
     mock_api = Mock()
     mock_gateway.api = mock_api
-    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+    mock_gateway.api.brand = Brand.YALE_GLOBAL  # Set brand for capability fetching
 
     # Create MockYaleXSData instance
     data = MockYaleXSData(mock_gateway)
@@ -634,7 +634,7 @@ async def test_fetch_lock_capabilities_with_error(
 
     mock_api = Mock()
     mock_gateway.api = mock_api
-    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+    mock_gateway.api.brand = Brand.YALE_GLOBAL  # Set brand for capability fetching
 
     # Create MockYaleXSData instance
     data = MockYaleXSData(mock_gateway)
@@ -684,7 +684,7 @@ async def test_fetch_lock_capabilities_skips_non_locks() -> None:
 
     mock_api = Mock()
     mock_gateway.api = mock_api
-    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+    mock_gateway.api.brand = Brand.YALE_GLOBAL  # Set brand for capability fetching
 
     # Create MockYaleXSData instance
     data = MockYaleXSData(mock_gateway)
@@ -736,7 +736,7 @@ async def test_fetch_lock_capabilities_sequential_execution() -> None:
 
     mock_api = Mock()
     mock_gateway.api = mock_api
-    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+    mock_gateway.api.brand = Brand.YALE_GLOBAL  # Set brand for capability fetching
 
     # Create MockYaleXSData instance
     data = MockYaleXSData(mock_gateway)
@@ -847,7 +847,7 @@ async def test_fetch_lock_capabilities_handles_404_and_409_errors(
 
     mock_api = Mock()
     mock_gateway.api = mock_api
-    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+    mock_gateway.api.brand = Brand.YALE_GLOBAL  # Set brand for capability fetching
 
     # Create MockYaleXSData instance
     data = MockYaleXSData(mock_gateway)
@@ -928,7 +928,7 @@ async def test_fetch_lock_capabilities_handles_other_errors_with_warning(
 
     mock_api = Mock()
     mock_gateway.api = mock_api
-    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+    mock_gateway.api.brand = Brand.YALE_GLOBAL  # Set brand for capability fetching
 
     # Create MockYaleXSData instance
     data = MockYaleXSData(mock_gateway)
@@ -1010,7 +1010,7 @@ async def test_fetch_lock_capabilities_handles_network_errors(
 
     mock_api = Mock()
     mock_gateway.api = mock_api
-    mock_gateway.api.brand = Brand.YALE_HOME  # Set brand for capability fetching
+    mock_gateway.api.brand = Brand.YALE_GLOBAL  # Set brand for capability fetching
 
     # Create MockYaleXSData instance
     data = MockYaleXSData(mock_gateway)
@@ -1944,7 +1944,7 @@ async def test_async_get_doorbell_image_happy_path() -> None:
 @pytest.mark.asyncio
 async def test_async_get_doorbell_image_retries_on_token_expired_for_yale() -> None:
     """Yale brands refresh the content token and retry once."""
-    gateway = _make_gateway(Brand.YALE_HOME)
+    gateway = _make_gateway(Brand.YALE_GLOBAL)
     data = MockYaleXSData(gateway)
     first = Mock()
     first.async_get_doorbell_image = AsyncMock(side_effect=ContentTokenExpired)

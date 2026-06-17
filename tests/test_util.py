@@ -396,10 +396,9 @@ def test_get_configuration_url():
     """Test that we get the correct configuration url for the brand."""
     assert get_configuration_url("august") == "https://account.august.com"
     assert get_configuration_url("yale_access") == "https://account.august.com"
-    assert get_configuration_url("yale_home") == "https://account.aaecosystem.com"
     assert get_configuration_url(Brand.AUGUST) == "https://account.august.com"
     assert get_configuration_url(Brand.YALE_ACCESS) == "https://account.august.com"
-    assert get_configuration_url(Brand.YALE_HOME) == "https://account.aaecosystem.com"
+    assert get_configuration_url(Brand.YALE_GLOBAL) == "https://account.aaecosystem.com"
 
 
 def test_get_ssl_context():

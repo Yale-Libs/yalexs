@@ -10,7 +10,6 @@ from .backports.enum import StrEnum
 class Brand(StrEnum):
     AUGUST = "august"
     YALE_ACCESS = "yale_access"
-    YALE_HOME = "yale_home"
     YALE_GLOBAL = "yale_global"  # requires OAuth with Home Assistant
     YALE_AUGUST = "yale_august"  # requires OAuth with Home Assistant
 
@@ -78,21 +77,6 @@ BRAND_CONFIG: dict[Brand, BrandConfig] = {
         configuration_url="https://account.august.com",
         pubnub_subscribe_token="sub-c-1030e062-0ebe-11e5-a5c2-0619f8945a4f",  # nosec
         pubnub_publish_token="pub-c-567d7f2d-270a-438a-a785-f0af12ad8312",  # nosec
-    ),
-    Brand.YALE_HOME: BrandConfig(
-        name="Yale Home",
-        branding="yale",
-        access_token_header=HEADER_ACCESS_TOKEN,
-        api_key_header=HEADER_API_KEY,
-        branding_header=HEADER_BRANDING,
-        api_key="6e2a2093-6118-42c5-8a41-e1fd25dce7a1",  # 🤞
-        supports_doorbells=True,
-        supports_alarms=True,
-        require_oauth=False,
-        base_url="https://api.aaecosystem.com",
-        configuration_url="https://account.aaecosystem.com",
-        pubnub_subscribe_token="sub-c-c9c38d4d-5796-46c9-9262-af20cf6a1d42",  # nosec
-        pubnub_publish_token="pub-c-353e8881-cf58-4b26-9baf-96f296de0677",  # nosec
     ),
     Brand.YALE_GLOBAL: BrandConfig(
         name="Yale Global",
