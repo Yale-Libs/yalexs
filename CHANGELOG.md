@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.2.9 (2026-06-17)
+
+### Bug Fixes
+
+- **device**: Type DeviceDetail name/serial/pubsub fields as optional
+  ([#407](https://github.com/Yale-Libs/yalexs/pull/407),
+  [`3b63d0b`](https://github.com/Yale-Libs/yalexs/commit/3b63d0ba400c08d5526985ea1b608dbcdc8cde2e))
+
+
 ## v9.2.8 (2026-06-17)
 
 ### Bug Fixes
