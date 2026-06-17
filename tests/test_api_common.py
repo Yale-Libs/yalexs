@@ -24,6 +24,7 @@ from yalexs.api_common import (
     API_WEBSOCKET_SUBSCRIBERS_WITH_SUBSCRIBER_ID,
     ApiCommon,
     _activity_from_dict,
+    _datetime_string_to_epoch,
     _process_activity_json,
     _process_alarm_devices_json,
     _process_alarms_json,
@@ -296,3 +297,12 @@ def test_build_call_alarm_state_request(api_global: ApiCommon) -> None:
 
 def test_get_brand_url_uses_brand_base_url(api_global: ApiCommon) -> None:
     assert api_global.get_brand_url("/x") == f"{BASE_URLS[Brand.YALE_GLOBAL]}/x"
+
+
+def test_datetime_string_to_epoch_returns_float_milliseconds() -> None:
+    # The helper is named *_to_epoch and feeds activity "dateTime" fields that
+    # are treated numerically downstream; it must return a float (epoch ms),
+    # not a datetime.
+    epoch_ms = _datetime_string_to_epoch("2017-12-10T07:43:39.056Z")
+    assert isinstance(epoch_ms, float)
+    assert epoch_ms == pytest.approx(1512891819056.0)
