@@ -89,9 +89,7 @@ class DoorbellDetail(DeviceDetail):
             self._model = data["type"]
 
         if "created_at" in recent_image:
-            self._image_created_at_datetime = parse_datetime(
-                recent_image["created_at"]
-            )
+            self._image_created_at_datetime = parse_datetime(recent_image["created_at"])
 
         self._battery_level: int | None = None
         if "telemetry" in data:
