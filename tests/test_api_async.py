@@ -305,13 +305,13 @@ class TestApiAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(False, second.is_operable)
 
     @aiointercept()
-    async def test_async_get_locks_yale_home_brand(self, mock):
+    async def test_async_get_locks_yale_global_brand(self, mock):
         mock.get(
-            ApiCommon(Brand.YALE_HOME).get_brand_url(API_GET_LOCKS_URL),
+            ApiCommon(Brand.YALE_GLOBAL).get_brand_url(API_GET_LOCKS_URL),
             body=load_fixture("get_locks.json"),
         )
 
-        api = ApiAsync(self._new_session(), brand=Brand.YALE_HOME)
+        api = ApiAsync(self._new_session(), brand=Brand.YALE_GLOBAL)
         locks = sorted(
             await api.async_get_locks(ACCESS_TOKEN), key=lambda d: d.device_id
         )

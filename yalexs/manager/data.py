@@ -123,7 +123,7 @@ class YaleXSData(SubscriberMixin):
         self._remove_inoperative_doorbells()
 
         # Fetch capabilities for locks (only for Yale brands)
-        if self.brand in (Brand.YALE_GLOBAL, Brand.YALE_HOME):
+        if self.brand is Brand.YALE_GLOBAL:
             await self._async_fetch_lock_capabilities()
 
         await self.async_setup_activity_stream()
@@ -639,7 +639,7 @@ class YaleXSData(SubscriberMixin):
         try:
             return await doorbell.async_get_doorbell_image(aiohttp_session, timeout)
         except ContentTokenExpired:
-            if self.brand not in (Brand.YALE_HOME, Brand.YALE_GLOBAL):
+            if self.brand is not Brand.YALE_GLOBAL:
                 raise
             _LOGGER.debug(
                 "Error fetching camera image, updating content-token from api to retry"
