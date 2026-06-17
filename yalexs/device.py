@@ -30,11 +30,11 @@ class DeviceDetail:
     def __init__(
         self,
         device_id: str,
-        device_name: str,
+        device_name: str | None,
         house_id: str,
-        serial_number: str,
+        serial_number: str | None,
         firmware_version: str,
-        pubsub_channel: str,
+        pubsub_channel: str | None,
         data: dict[str, Any],
     ) -> None:
         self._device_id = device_id
@@ -46,29 +46,29 @@ class DeviceDetail:
         self._data = data
 
     @cached_property
-    def raw(self):
+    def raw(self) -> dict[str, Any]:
         return self._data
 
     @cached_property
-    def device_id(self):
+    def device_id(self) -> str:
         return self._device_id
 
     @cached_property
-    def device_name(self):
+    def device_name(self) -> str | None:
         return self._device_name
 
     @cached_property
-    def house_id(self):
+    def house_id(self) -> str:
         return self._house_id
 
     @cached_property
-    def serial_number(self):
+    def serial_number(self) -> str | None:
         return self._serial_number
 
     @cached_property
-    def firmware_version(self):
+    def firmware_version(self) -> str:
         return self._firmware_version
 
     @cached_property
-    def pubsub_channel(self):
+    def pubsub_channel(self) -> str | None:
         return self._pubsub_channel
