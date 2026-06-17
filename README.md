@@ -1,4 +1,4 @@
-# yalexs [![PyPI version](https://badge.fury.io/py/yalexs.svg)](https://badge.fury.io/py/yalexs) [![Build Status](https://github.com/bdraco/yalexs/workflows/CI/badge.svg)](https://github.com/bdraco/yalexs) [![codecov](https://codecov.io/gh/Yale-Libs/yalexs/branch/main/graph/badge.svg)](https://codecov.io/gh/Yale-Libs/yalexs) [![Python Versions](https://img.shields.io/pypi/pyversions/yalexs.svg)](https://pypi.python.org/pypi/yalexs/)
+# yalexs [![PyPI version](https://badge.fury.io/py/yalexs.svg)](https://badge.fury.io/py/yalexs) [![Build Status](https://github.com/Yale-Libs/yalexs/workflows/CI/badge.svg)](https://github.com/Yale-Libs/yalexs) [![codecov](https://codecov.io/gh/Yale-Libs/yalexs/branch/main/graph/badge.svg)](https://codecov.io/gh/Yale-Libs/yalexs) [![Python Versions](https://img.shields.io/pypi/pyversions/yalexs.svg)](https://pypi.python.org/pypi/yalexs/)
 
 Python API for Yale Access (formerly August) Smart Lock and Doorbell. This is used in [Home Assistant](https://home-assistant.io) but should be generic enough that can be used elsewhere.
 
