@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v9.2.8 (2026-06-17)
+
+### Bug Fixes
+
+- Drop Brand.YALE_HOME config since it no longer works
+  ([#410](https://github.com/Yale-Libs/yalexs/pull/410),
+  [`389ae6c`](https://github.com/Yale-Libs/yalexs/commit/389ae6c83ceca12db02ef515493a5a17f78cea49))
+
+### Testing
+
+- Switch from aioresponses to aiointercept ([#403](https://github.com/Yale-Libs/yalexs/pull/403),
+  [`679c62f`](https://github.com/Yale-Libs/yalexs/commit/679c62f0703fde5848f342c43831229e20a5a04a))
+
+
 ## v9.2.7 (2026-05-29)
 
 ### Bug Fixes
