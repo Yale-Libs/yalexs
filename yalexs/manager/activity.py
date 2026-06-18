@@ -271,6 +271,7 @@ class ActivityStream(SubscriberMixin):
         _LOGGER.debug(
             "Completed retrieving device activities for house id %s", house_id
         )
+        # Signal between yields so subscribers observe every activity in order.
         for activity in self._iter_newer_device_activities(activities):
             device_id = activity.device_id
             _LOGGER.debug(
@@ -293,42 +294,18 @@ class ActivityStream(SubscriberMixin):
     ) -> Iterator[Activity]:
         """Process and yield newer activities in chronological order."""
         latest_activities = self._latest_activities
-        previous_activities = {
-            (activity.device_id, activity.activity_type): latest_activities[
-                activity.device_id
-            ][activity.activity_type]
-            for activity in activities
-        }
-        newer_activities: list[Activity] = []
-        for activity in activities:
+        for activity in sorted(activities, key=lambda item: item.activity_start_time):
             device_id = activity.device_id
             activity_type = activity.activity_type
-            # Ignore activities that are older than the latest one unless it is a non
-            # locking or unlocking activity with the exact same start time.
-            last_activity = previous_activities[(device_id, activity_type)]
-            # The activity stream can have duplicate activities. So we need
-            # to call get_latest_activity to figure out if if the activity
-            # is actually newer than the last one.
-            latest_activity = get_latest_activity(activity, last_activity)
-            if latest_activity != activity:
+            device_activities = latest_activities[device_id]
+            last_activity = device_activities[activity_type]
+            if get_latest_activity(activity, last_activity) != activity:
                 _LOGGER.debug(
                     "Skipping activity %s for device %s as it is not newer than the last one: %s",
                     activity,
                     device_id,
                     last_activity,
                 )
-                continue
-
-            newer_activities.append(activity)
-
-        for activity in sorted(
-            newer_activities, key=lambda item: item.activity_start_time
-        ):
-            device_id = activity.device_id
-            activity_type = activity.activity_type
-            device_activities = latest_activities[device_id]
-            last_activity = device_activities[activity_type]
-            if get_latest_activity(activity, last_activity) != activity:
                 continue
             device_activities[activity_type] = activity
             yield activity
