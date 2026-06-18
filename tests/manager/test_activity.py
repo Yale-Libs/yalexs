@@ -514,6 +514,33 @@ async def test_update_house_id_signals_subscribers() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_house_id_signals_duplicate_activity_once() -> None:
+    """Duplicate activities within one API response are signalled once."""
+    stream, _api, async_get = _build_stream()
+    activity_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    first = _make_activity(
+        "dev-1",
+        ActivityType.LOCK_OPERATION,
+        activity_time,
+        action="lock",
+    )
+    duplicate = _make_activity(
+        "dev-1",
+        ActivityType.LOCK_OPERATION,
+        activity_time,
+        action="lock",
+    )
+    async_get.return_value = [first, duplicate]
+    callback = MagicMock()
+    stream.async_subscribe_device_id("dev-1", callback)
+
+    await stream._async_update_house_id("house")
+
+    callback.assert_called_once()
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
 async def test_process_newer_skips_duplicate_activity() -> None:
     """An identical activity already stored is not re-emitted."""
     stream, *_ = _build_stream()
@@ -557,6 +584,57 @@ async def test_process_newer_stores_new_activity() -> None:
     updated = stream.async_process_newer_device_activities([newer])
     assert updated == {"dev"}
     assert stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] is newer
+
+
+@pytest.mark.asyncio
+async def test_update_house_id_emits_delayed_activities_in_chronological_order() -> (
+    None
+):
+    """All unseen activities newer than the pre-poll watermark are emitted."""
+    stream, _api, async_get = _build_stream()
+    watermark_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    watermark = _make_activity(
+        "dev",
+        ActivityType.LOCK_OPERATION,
+        watermark_time,
+        action="lock",
+    )
+    returned_watermark = _make_activity(
+        "dev",
+        ActivityType.LOCK_OPERATION,
+        watermark_time,
+        action="lock",
+    )
+    delayed_unlock = _make_activity(
+        "dev",
+        ActivityType.LOCK_OPERATION,
+        watermark_time + timedelta(minutes=1),
+        action="unlock",
+    )
+    newer_lock = _make_activity(
+        "dev",
+        ActivityType.LOCK_OPERATION,
+        watermark_time + timedelta(hours=2),
+        action="lock",
+    )
+    stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = watermark
+    async_get.return_value = [newer_lock, delayed_unlock, returned_watermark]
+
+    emitted_actions: list[str] = []
+    stream.async_subscribe_device_id(
+        "dev",
+        lambda: emitted_actions.append(
+            stream.get_latest_device_activity(
+                "dev", {ActivityType.LOCK_OPERATION}
+            ).action
+        ),
+    )
+
+    await stream._async_update_house_id("house")
+
+    assert emitted_actions == ["unlock", "lock"]
+    assert stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] is newer_lock
+    stream.async_stop()
 
 
 @pytest.mark.asyncio
