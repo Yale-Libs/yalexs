@@ -292,7 +292,11 @@ class ActivityStream(SubscriberMixin):
     def _iter_newer_device_activities(
         self, activities: list[Activity]
     ) -> Iterator[Activity]:
-        """Process and yield newer activities in chronological order."""
+        """Store and yield newer activities chronologically, one activity at a time.
+
+        This iterator mutates ``_latest_activities`` immediately before each yield
+        and must be consumed lazily when subscribers need to observe every update.
+        """
         latest_activities = self._latest_activities
         for activity in sorted(activities, key=lambda item: item.activity_start_time):
             device_id = activity.device_id
