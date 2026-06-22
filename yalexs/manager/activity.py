@@ -211,7 +211,9 @@ class ActivityStream(SubscriberMixin):
 
     def _initial_resync_complete(self, now: float) -> bool:
         """Return if the initial resync is complete."""
-        return self._start_time and now - self._start_time > INITIAL_LOCK_RESYNC_TIME
+        return bool(
+            self._start_time and now - self._start_time > INITIAL_LOCK_RESYNC_TIME
+        )
 
     def _set_update_count(self, house_id: str, now: float) -> None:
         """Set the update count."""
@@ -239,8 +241,8 @@ class ActivityStream(SubscriberMixin):
         delay = self._determine_update_delay(house_id, now)
         self._async_schedule_update(house_id, now, delay)
 
-    def _activity_limit(self) -> bool:
-        """Return if the activity limit has been reached."""
+    def _activity_limit(self) -> int:
+        """Return the number of activities to fetch."""
         if self._did_first_update:
             return ACTIVITY_STREAM_FETCH_LIMIT
         return ACTIVITY_CATCH_UP_FETCH_LIMIT
