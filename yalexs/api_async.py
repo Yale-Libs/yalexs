@@ -146,9 +146,7 @@ class ApiAsync(ApiCommon):
         )
         return DoorbellDetail(await response.json())
 
-    async def async_wakeup_doorbell(
-        self, access_token: str, doorbell_id: str
-    ) -> bool:
+    async def async_wakeup_doorbell(self, access_token: str, doorbell_id: str) -> bool:
         await self._async_dict_to_api(
             self._build_wakeup_doorbell_request(access_token, doorbell_id)
         )
