@@ -74,14 +74,43 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  # Dry run on PRs and non-main pushes. No environment, no publish
+  # permissions, no OIDC, so PR runs carry no release blast radius.
+  release-dry-run:
+    needs:
+      - test
+      - lint
+    if: github.ref_name != 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Create local branch name
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: git switch -C "$BRANCH"
+
+      - name: Test release
+        uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0 # v10.5.3
+        with:
+          no_operation_mode: true
+
+  # Real release, only on main. The release environment and write/OIDC
+  # permissions are scoped to this job so they never apply to PR runs.
   release:
     needs:
       - test
       - lint
-
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     environment: release
-    concurrency: release
+    concurrency:
+      group: release-${{ github.ref }}
     permissions:
       id-token: write
       contents: write
@@ -97,21 +126,13 @@ jobs:
 
       - name: Create local branch name
         env:
-          BRANCH: ${{ github.head_ref || github.ref_name }}
+          BRANCH: ${{ github.ref_name }}
         run: git switch -C "$BRANCH"
-
-      # Do a dry run of PSR
-      - name: Test release
-        uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0 # v10.5.3
-        if: github.ref_name != 'main'
-        with:
-          no_operation_mode: true
 
       # On main branch: actual PSR + upload to PyPI & GitHub
       - name: Release
         uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0 # v10.5.3
         id: release
-        if: github.ref_name == 'main'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
