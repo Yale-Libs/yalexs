@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
+from collections.abc import Iterator
+from operator import attrgetter
 
 from aiohttp import ClientError
 
@@ -270,7 +272,9 @@ class ActivityStream(SubscriberMixin):
         _LOGGER.debug(
             "Completed retrieving device activities for house id %s", house_id
         )
-        for device_id in self.async_process_newer_device_activities(activities):
+        # Signal between yields so subscribers observe every activity in order.
+        for activity in self._iter_newer_device_activities(activities):
+            device_id = activity.device_id
             _LOGGER.debug(
                 "async_signal_device_id_update (from activity stream): %s",
                 device_id,
@@ -281,20 +285,26 @@ class ActivityStream(SubscriberMixin):
         self, activities: list[Activity]
     ) -> set[str]:
         """Process activities if they are newer than the last one."""
-        updated_device_ids: set[str] = set()
+        return {
+            activity.device_id
+            for activity in self._iter_newer_device_activities(activities)
+        }
+
+    def _iter_newer_device_activities(
+        self, activities: list[Activity]
+    ) -> Iterator[Activity]:
+        """Store and yield newer activities chronologically, one activity at a time.
+
+        This iterator mutates ``_latest_activities`` immediately before each yield
+        and must be consumed lazily when subscribers need to observe every update.
+        """
         latest_activities = self._latest_activities
-        for activity in activities:
+        for activity in sorted(activities, key=attrgetter("activity_start_time")):
             device_id = activity.device_id
             activity_type = activity.activity_type
             device_activities = latest_activities[device_id]
-            # Ignore activities that are older than the latest one unless it is a non
-            # locking or unlocking activity with the exact same start time.
             last_activity = device_activities[activity_type]
-            # The activity stream can have duplicate activities. So we need
-            # to call get_latest_activity to figure out if if the activity
-            # is actually newer than the last one.
-            latest_activity = get_latest_activity(activity, last_activity)
-            if latest_activity != activity:
+            if get_latest_activity(activity, last_activity) != activity:
                 _LOGGER.debug(
                     "Skipping activity %s for device %s as it is not newer than the last one: %s",
                     activity,
@@ -302,8 +312,5 @@ class ActivityStream(SubscriberMixin):
                     last_activity,
                 )
                 continue
-
             device_activities[activity_type] = activity
-            updated_device_ids.add(device_id)
-
-        return updated_device_ids
+            yield activity
