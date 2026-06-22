@@ -638,6 +638,94 @@ async def test_update_house_id_emits_delayed_activities_in_chronological_order()
 
 
 @pytest.mark.asyncio
+async def test_update_house_id_sorts_across_devices_independently() -> None:
+    """A single response interleaving devices updates each watermark on its own."""
+    stream, _api, async_get = _build_stream()
+    base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    a_watermark = _make_activity("dev-a", ActivityType.LOCK_OPERATION, base, "lock")
+    stream._latest_activities["dev-a"][ActivityType.LOCK_OPERATION] = a_watermark
+
+    a_unlock = _make_activity(
+        "dev-a", ActivityType.LOCK_OPERATION, base + timedelta(minutes=5), "unlock"
+    )
+    a_lock = _make_activity(
+        "dev-a", ActivityType.LOCK_OPERATION, base + timedelta(minutes=10), "lock"
+    )
+    b_lock = _make_activity(
+        "dev-b", ActivityType.LOCK_OPERATION, base + timedelta(minutes=7), "lock"
+    )
+    # Returned out of order and interleaved between the two devices.
+    async_get.return_value = [a_lock, b_lock, a_unlock]
+
+    emitted: list[tuple[str, str]] = []
+    for dev_id in ("dev-a", "dev-b"):
+        stream.async_subscribe_device_id(
+            dev_id,
+            lambda d=dev_id: emitted.append(
+                (
+                    d,
+                    stream.get_latest_device_activity(
+                        d, {ActivityType.LOCK_OPERATION}
+                    ).action,
+                )
+            ),
+        )
+
+    await stream._async_update_house_id("house")
+
+    # Each device observes its own activities, ordered by the global timeline.
+    assert emitted == [("dev-a", "unlock"), ("dev-b", "lock"), ("dev-a", "lock")]
+    assert stream._latest_activities["dev-a"][ActivityType.LOCK_OPERATION] is a_lock
+    assert stream._latest_activities["dev-b"][ActivityType.LOCK_OPERATION] is b_lock
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_update_house_id_tracks_activity_types_separately() -> None:
+    """Different activity types for one device are stored in their own slots."""
+    stream, _api, async_get = _build_stream()
+    base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    door = _make_activity(
+        "dev", ActivityType.DOOR_OPERATION, base + timedelta(minutes=3), "doorclosed"
+    )
+    unlock = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, base + timedelta(minutes=5), "unlock"
+    )
+    async_get.return_value = [unlock, door]
+    callback = MagicMock()
+    stream.async_subscribe_device_id("dev", callback)
+
+    await stream._async_update_house_id("house")
+
+    assert callback.call_count == 2
+    assert stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] is unlock
+    assert stream._latest_activities["dev"][ActivityType.DOOR_OPERATION] is door
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_process_newer_stores_newest_from_out_of_order_batch() -> None:
+    """The push path sorts a batch and leaves the newest activity stored."""
+    stream, *_ = _build_stream()
+    base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, base, "lock"
+    )
+    delayed_unlock = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, base + timedelta(minutes=5), "unlock"
+    )
+    newest_lock = _make_activity(
+        "dev", ActivityType.LOCK_OPERATION, base + timedelta(minutes=10), "lock"
+    )
+    # Newest first, so the delayed unlock trails the lock in the batch.
+    updated = stream.async_process_newer_device_activities(
+        [newest_lock, delayed_unlock]
+    )
+    assert updated == {"dev"}
+    assert stream._latest_activities["dev"][ActivityType.LOCK_OPERATION] is newest_lock
+
+
+@pytest.mark.asyncio
 async def test_activity_limit_switches_after_first_update() -> None:
     """Before the first update the catch-up limit is used; afterwards the stream limit."""
     stream, *_ = _build_stream()
