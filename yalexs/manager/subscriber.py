@@ -97,7 +97,9 @@ class SubscriberMixin(ABC):
 
     def async_signal_device_id_update(self, device_id: str) -> None:
         """Call the callbacks for a device_id."""
-        for update_callback in self._subscriptions.get(device_id, ()):
+        # Snapshot the set so a callback that subscribes or unsubscribes while
+        # being notified cannot mutate it mid-iteration and raise RuntimeError.
+        for update_callback in tuple(self._subscriptions.get(device_id, ())):
             self._async_call_update_callback(update_callback, device_id)
 
     def _async_call_update_callback(
