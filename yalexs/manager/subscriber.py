@@ -98,4 +98,18 @@ class SubscriberMixin(ABC):
     def async_signal_device_id_update(self, device_id: str) -> None:
         """Call the callbacks for a device_id."""
         for update_callback in self._subscriptions.get(device_id, ()):
+            self._async_call_update_callback(update_callback, device_id)
+
+    def _async_call_update_callback(
+        self, update_callback: Callable[[], None], device_id: str
+    ) -> None:
+        """Call a single subscriber callback, isolating its failures.
+
+        A misbehaving subscriber must not stop the others from being notified,
+        and callers signal mid-batch, so a raise here would otherwise abort the
+        remaining updates in the same poll.
+        """
+        try:
             update_callback()
+        except Exception:
+            _LOGGER.exception("Error calling update callback for device %s", device_id)

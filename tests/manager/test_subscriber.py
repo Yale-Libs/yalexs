@@ -103,6 +103,24 @@ async def test_signal_device_id_update_invokes_callbacks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_signal_device_id_update_continues_when_a_callback_raises(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sub = _Subscriber(timedelta(seconds=30))
+    raising = MagicMock(side_effect=RuntimeError("boom"))
+    other = MagicMock()
+    sub.async_subscribe_device_id("lock1", raising)
+    sub.async_subscribe_device_id("lock1", other)
+
+    # A raising subscriber must not propagate or starve the other callbacks.
+    sub.async_signal_device_id_update("lock1")
+
+    raising.assert_called_once_with()
+    other.assert_called_once_with()
+    assert "Error calling update callback for device lock1" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_signal_device_id_update_unknown_device_is_noop() -> None:
     sub = _Subscriber(timedelta(seconds=30))
     # No subscribers at all — must not raise.
