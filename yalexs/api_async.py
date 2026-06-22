@@ -148,7 +148,7 @@ class ApiAsync(ApiCommon):
 
     async def async_wakeup_doorbell(
         self, access_token: str, doorbell_id: str
-    ) -> ClientResponse:
+    ) -> bool:
         await self._async_dict_to_api(
             self._build_wakeup_doorbell_request(access_token, doorbell_id)
         )
@@ -269,7 +269,7 @@ class ApiAsync(ApiCommon):
         )
         return await response.text()
 
-    async def _async_lock(self, access_token: str, lock_id: str) -> str:
+    async def _async_lock(self, access_token: str, lock_id: str) -> dict[str, Any]:
         return await self._async_call_lock_operation(
             API_LOCK_URL, access_token, lock_id
         )

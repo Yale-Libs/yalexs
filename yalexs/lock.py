@@ -280,7 +280,7 @@ class LockOperation(Enum):
     OPEN = "open"
 
 
-def determine_lock_status(status: str) -> LockStatus:
+def determine_lock_status(status: str | None) -> LockStatus:
     if status in LOCKED_STATUS:
         return LockStatus.LOCKED
     if status in UNLATCHED_STATUS:
