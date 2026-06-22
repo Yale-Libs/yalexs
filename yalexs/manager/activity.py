@@ -6,6 +6,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from collections.abc import Iterator
+from operator import attrgetter
 
 from aiohttp import ClientError
 
@@ -298,7 +299,7 @@ class ActivityStream(SubscriberMixin):
         and must be consumed lazily when subscribers need to observe every update.
         """
         latest_activities = self._latest_activities
-        for activity in sorted(activities, key=lambda item: item.activity_start_time):
+        for activity in sorted(activities, key=attrgetter("activity_start_time")):
             device_id = activity.device_id
             activity_type = activity.activity_type
             device_activities = latest_activities[device_id]
