@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime
 import logging
 from functools import cache
 from typing import Any
@@ -158,7 +157,7 @@ def _map_lock_result_to_activity(
     )
 
 
-def _datetime_string_to_epoch(datetime_string: str) -> datetime.datetime:
+def _datetime_string_to_epoch(datetime_string: str) -> float:
     return parse_datetime(datetime_string).timestamp() * 1000
 
 

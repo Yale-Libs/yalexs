@@ -202,7 +202,7 @@ class ApiAsync(ApiCommon):
 
     async def async_get_lock_status(
         self, access_token: str, lock_id: str, door_status=False
-    ) -> LockStatus:
+    ) -> LockStatus | tuple[LockStatus, LockDoorStatus]:
         response = await self._async_dict_to_api(
             self._build_get_lock_status_request(access_token, lock_id)
         )
@@ -274,7 +274,7 @@ class ApiAsync(ApiCommon):
             API_LOCK_URL, access_token, lock_id
         )
 
-    async def async_lock(self, access_token: str, lock_id: str) -> str:
+    async def async_lock(self, access_token: str, lock_id: str) -> LockStatus:
         """Execute a remote lock operation.
 
         Returns a LockStatus state.
