@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import timedelta
 from unittest.mock import MagicMock
 
@@ -100,6 +101,44 @@ async def test_signal_device_id_update_invokes_callbacks() -> None:
     cb1.assert_called_once_with()
     cb2.assert_called_once_with()
     other.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_signal_device_id_update_continues_when_a_callback_raises(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sub = _Subscriber(timedelta(seconds=30))
+    raising = MagicMock(side_effect=RuntimeError("boom"))
+    other = MagicMock()
+    sub.async_subscribe_device_id("lock1", raising)
+    sub.async_subscribe_device_id("lock1", other)
+
+    # A raising subscriber must not propagate or starve the other callbacks.
+    with caplog.at_level(logging.ERROR, logger="yalexs.manager.subscriber"):
+        sub.async_signal_device_id_update("lock1")
+
+    raising.assert_called_once_with()
+    other.assert_called_once_with()
+    assert "Error calling update callback for device lock1" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_signal_device_id_update_allows_callback_to_unsubscribe() -> None:
+    sub = _Subscriber(timedelta(seconds=30))
+    other = MagicMock()
+
+    def _unsubscribe_self() -> None:
+        sub.async_unsubscribe_device_id("lock1", _unsubscribe_self)
+
+    sub.async_subscribe_device_id("lock1", _unsubscribe_self)
+    sub.async_subscribe_device_id("lock1", other)
+
+    # Mutating the subscription set from within a callback must not raise
+    # RuntimeError or skip the remaining subscribers.
+    sub.async_signal_device_id_update("lock1")
+
+    other.assert_called_once_with()
+    assert _unsubscribe_self not in sub._subscriptions.get("lock1", set())
 
 
 @pytest.mark.asyncio
