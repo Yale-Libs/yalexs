@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.2.10 (2026-06-22)
+
+### Bug Fixes
+
+- Isolate subscriber callback failures ([#416](https://github.com/Yale-Libs/yalexs/pull/416),
+  [`8e29b95`](https://github.com/Yale-Libs/yalexs/commit/8e29b95e8ad006a52a7052b0aa466b31b305a90a))
+
+- Process delayed activities chronologically ([#413](https://github.com/Yale-Libs/yalexs/pull/413),
+  [`eb8fc52`](https://github.com/Yale-Libs/yalexs/commit/eb8fc52c4a1db0f0d0fafc123ae198f558754e07))
+
+- **api**: Correct return-type annotations on lock operations
+  ([#411](https://github.com/Yale-Libs/yalexs/pull/411),
+  [`518a0c0`](https://github.com/Yale-Libs/yalexs/commit/518a0c0921b9d3686affd1c732eba2b0f45ea29d))
+
+
 ## v9.2.9 (2026-06-17)
 
 ### Bug Fixes
