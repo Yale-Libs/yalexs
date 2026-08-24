@@ -7,6 +7,7 @@ import dateutil.parser
 from dateutil.tz import tzlocal
 
 from yalexs.activity import (
+    ACTION_LOCK_LOCK,
     SOURCE_PUBNUB,
     SOURCE_WEBSOCKET,
     ActivityType,
@@ -566,6 +567,21 @@ class TestBridge(unittest.TestCase):
         )
         assert len(activities) == 1
         assert activities[0].source == SOURCE_WEBSOCKET
+
+    def test_websocket_secure_mode_lock_action(self):
+        """Secure mode arrives as lockAction 'secure' and must be treated as locked."""
+        lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+            {"lockAction": "secure", "doorState": "closed"},
+            source=SOURCE_WEBSOCKET,
+        )
+        assert len(activities) == 2
+        lock_activity = activities[0]
+        assert isinstance(lock_activity, LockOperationActivity)
+        assert lock_activity.action == ACTION_LOCK_LOCK
+        assert isinstance(activities[1], DoorOperationActivity)
 
     def test_pubnub_source_default(self):
         lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
