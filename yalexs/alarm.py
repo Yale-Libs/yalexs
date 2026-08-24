@@ -63,7 +63,7 @@ class AlarmDevice(DeviceDetail):
             data,
         )
 
-        self._status: str = data["status"]
+        self._status: dict[str, Any] = data["status"]
         self._model = data["type"]
 
         self._battery_level = 100
@@ -71,7 +71,7 @@ class AlarmDevice(DeviceDetail):
             self._battery_level = 10
 
     @cached_property
-    def status(self) -> str:
+    def status(self) -> dict[str, Any]:
         return self._status
 
     @cached_property

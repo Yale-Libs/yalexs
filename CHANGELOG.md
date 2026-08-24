@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v9.2.11 (2026-08-24)
+
+### Bug Fixes
+
+- **alarm**: Correct AlarmDevice.status type to dict
+  ([#404](https://github.com/Yale-Libs/yalexs/pull/404),
+  [`abc114d`](https://github.com/Yale-Libs/yalexs/commit/abc114d40867428e3e0cef072cf2286bf3bb1dbb))
+
+### Testing
+
+- **activity**: Guard action→state map completeness
+  ([#401](https://github.com/Yale-Libs/yalexs/pull/401),
+  [`929bf55`](https://github.com/Yale-Libs/yalexs/commit/929bf55e06f4d6b871972c730852b3a9bc606497))
+
+
 ## v9.2.10 (2026-06-22)
 
 ### Bug Fixes
