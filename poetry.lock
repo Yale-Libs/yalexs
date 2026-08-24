@@ -1519,26 +1519,26 @@ docs = ["furo", "sphinx"]
 
 [[package]]
 name = "python-socketio"
-version = "5.16.0"
+version = "5.16.4"
 description = "Socket.IO server and client for Python"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "python_socketio-5.16.0-py3-none-any.whl", hash = "sha256:d95802961e15c7bd54ecf884c6e7644f81be8460f0a02ee66b473df58088ee8a"},
-    {file = "python_socketio-5.16.0.tar.gz", hash = "sha256:f79403c7f1ba8b84460aa8fe4c671414c8145b21a501b46b676f3740286356fd"},
+    {file = "python_socketio-5.16.4-py3-none-any.whl", hash = "sha256:0eb9c7687e7fbf59e60d714fd62afba77dfaf8ef8a06a0bff05a86c351accc2f"},
+    {file = "python_socketio-5.16.4.tar.gz", hash = "sha256:f7fa4a43cc8e687930b5c6e44d6e2efc2071eca4bef49b8bb3dc0827f7f92235"},
 ]
 
 [package.dependencies]
 aiohttp = {version = ">=3.4", optional = true, markers = "extra == \"asyncio-client\""}
 bidict = ">=0.21.0"
-python-engineio = ">=4.11.0"
+python-engineio = ">=4.13.2"
 
 [package.extras]
 asyncio-client = ["aiohttp (>=3.4)"]
 client = ["requests (>=2.21.0)", "websocket-client (>=0.54.0)"]
 dev = ["tox"]
-docs = ["sphinx"]
+docs = ["furo", "sphinx"]
 
 [[package]]
 name = "pyyaml"
