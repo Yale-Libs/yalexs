@@ -213,6 +213,8 @@ def test_determine_lock_status_known_states_and_fallback() -> None:
     assert determine_lock_status("kAugLockState_Unlocking") is LockStatus.UNLOCKING
     assert determine_lock_status("kAugLockState_Unlatching") is LockStatus.UNLATCHING
     assert determine_lock_status("FAILED_BRIDGE_ERROR_LOCK_JAMMED") is LockStatus.JAMMED
+    assert determine_lock_status("secure") is LockStatus.LOCKED
+    assert determine_lock_status("kAugLockState_SecureMode") is LockStatus.LOCKED
     assert determine_lock_status("bogus") is LockStatus.UNKNOWN
 
 

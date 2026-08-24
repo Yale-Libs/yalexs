@@ -14,7 +14,14 @@ from .users import cache_user_info
 if TYPE_CHECKING:
     from .capabilities import CapabilitiesResponse
 
-LOCKED_STATUS = ("lock", "locked", "kAugLockState_Locked", "kAugLockState_SecureMode")
+LOCKED_STATUS = (
+    "lock",
+    "locked",
+    "secure",
+    "securemode",
+    "kAugLockState_Locked",
+    "kAugLockState_SecureMode",
+)
 LOCKING_STATUS = ("kAugLockState_Locking",)
 UNLATCHED_STATUS = ("unlatched", "kAugLockState_Unlatched")
 UNLATCHING_STATUS = ("kAugLockState_Unlatching",)
