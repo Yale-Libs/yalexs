@@ -103,8 +103,10 @@ def activities_from_pubnub_message(  # noqa: C901
             _add_activity(activities, activity_dict, ACTION_BRIDGE_OFFLINE, source)
         elif status := message.get("lockAction", message.get(LOCK_STATUS_KEY)):
             if status in _BRIDGE_ACTIONS:
+                # A bridge notification is not a lock status; do not route it
+                # through determine_lock_status (it would look unrecognized).
                 _add_activity(activities, activity_dict, status, source)
-            if action := LOCK_STATUS_TO_ACTION.get(determine_lock_status(status)):
+            elif action := LOCK_STATUS_TO_ACTION.get(determine_lock_status(status)):
                 _add_activity(activities, activity_dict, action, source)
         if door_state_raw := message.get(DOOR_STATE_KEY):
             door_state = determine_door_state(door_state_raw)
