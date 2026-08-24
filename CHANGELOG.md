@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v9.2.12 (2026-08-24)
+
+### Bug Fixes
+
+- **doorbell**: Make image_url/content_token setters visible to type-checkers
+  ([#412](https://github.com/Yale-Libs/yalexs/pull/412),
+  [`801f976`](https://github.com/Yale-Libs/yalexs/commit/801f976f30e4f43558ad965b02da990327e36e22))
+
+
+## v9.2.11 (2026-08-24)
+
+### Bug Fixes
+
+- **alarm**: Correct AlarmDevice.status type to dict
+  ([#404](https://github.com/Yale-Libs/yalexs/pull/404),
+  [`abc114d`](https://github.com/Yale-Libs/yalexs/commit/abc114d40867428e3e0cef072cf2286bf3bb1dbb))
+
+### Testing
+
+- **activity**: Guard action→state map completeness
+  ([#401](https://github.com/Yale-Libs/yalexs/pull/401),
+  [`929bf55`](https://github.com/Yale-Libs/yalexs/commit/929bf55e06f4d6b871972c730852b3a9bc606497))
+
+
 ## v9.2.10 (2026-06-22)
 
 ### Bug Fixes

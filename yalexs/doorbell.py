@@ -89,9 +89,7 @@ class DoorbellDetail(DeviceDetail):
             self._model = data["type"]
 
         if "created_at" in recent_image:
-            self._image_created_at_datetime: datetime.datetime = parse_datetime(
-                recent_image["created_at"]
-            )
+            self._image_created_at_datetime = parse_datetime(recent_image["created_at"])
 
         self._battery_level: int | None = None
         if "telemetry" in data:
@@ -142,15 +140,15 @@ class DoorbellDetail(DeviceDetail):
     def image_url(self) -> str | None:
         return self._image_url
 
-    @property
-    def content_token(self) -> str:
-        return self._content_token
-
     @image_url.setter
     def image_url(self, var: str | None) -> None:
         """Update the doorbell image url (usually form the activity log)."""
         _LOGGER.debug("image_url updated for %s", self.device_name)
         self._image_url = var
+
+    @property
+    def content_token(self) -> str:
+        return self._content_token
 
     @content_token.setter
     def content_token(self, var: str) -> None:

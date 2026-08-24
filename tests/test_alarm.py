@@ -100,6 +100,18 @@ def test_alarm_device_attributes() -> None:
     assert dev.model == "contact-sensor"
 
 
+def test_alarm_device_status_returns_raw_dict() -> None:
+    dev = AlarmDevice(_alarm_device_data())
+    assert dev.status == {
+        "firmwareVersion": "1.2.3",
+        "online": True,
+        "contactOpen": False,
+        "fault": False,
+        "tamperOpen": False,
+        "lowBattery": False,
+    }
+
+
 def test_alarm_device_status_flags_defaults() -> None:
     dev = AlarmDevice(_alarm_device_data())
     assert dev.is_online is True
