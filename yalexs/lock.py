@@ -18,6 +18,7 @@ LOCKED_STATUS = (
     "lock",
     "locked",
     "secure",
+    "securemode",
     "kAugLockState_Locked",
     "kAugLockState_SecureMode",
 )
