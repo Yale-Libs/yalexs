@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.2.12 (2026-08-24)
+
+### Bug Fixes
+
+- **doorbell**: Make image_url/content_token setters visible to type-checkers
+  ([#412](https://github.com/Yale-Libs/yalexs/pull/412),
+  [`801f976`](https://github.com/Yale-Libs/yalexs/commit/801f976f30e4f43558ad965b02da990327e36e22))
+
+
 ## v9.2.11 (2026-08-24)
 
 ### Bug Fixes
