@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v9.2.13 (2026-08-24)
+
+### Bug Fixes
+
+- Treat websocket lockAction "secure" as locked
+  ([#433](https://github.com/Yale-Libs/yalexs/pull/433),
+  [`6370a83`](https://github.com/Yale-Libs/yalexs/commit/6370a8331bcfe912f420181caedbe327df6b6d35))
+
+
 ## v9.2.12 (2026-08-24)
 
 ### Bug Fixes
