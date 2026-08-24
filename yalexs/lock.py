@@ -287,32 +287,44 @@ class LockOperation(Enum):
     OPEN = "open"
 
 
-def determine_lock_status(status: str) -> LockStatus:
-    if status in LOCKED_STATUS:
-        return LockStatus.LOCKED
-    if status in UNLATCHED_STATUS:
-        return LockStatus.UNLATCHED
-    if status in UNLOCKED_STATUS:
-        return LockStatus.UNLOCKED
-    if status in UNLATCHING_STATUS:
-        return LockStatus.UNLATCHING
-    if status in UNLOCKING_STATUS:
-        return LockStatus.UNLOCKING
-    if status in LOCKING_STATUS:
-        return LockStatus.LOCKING
-    if status in JAMMED_STATUS:
-        return LockStatus.JAMMED
-    return LockStatus.UNKNOWN
+# The cloud sends the same state under different spellings depending on
+# brand, region and transport (websocket vs. REST), so match case-insensitively.
+_LOCK_STATUS_BY_TOKEN = {
+    token.lower(): lock_status
+    for tokens, lock_status in (
+        (LOCKED_STATUS, LockStatus.LOCKED),
+        (UNLATCHED_STATUS, LockStatus.UNLATCHED),
+        (UNLOCKED_STATUS, LockStatus.UNLOCKED),
+        (UNLATCHING_STATUS, LockStatus.UNLATCHING),
+        (UNLOCKING_STATUS, LockStatus.UNLOCKING),
+        (LOCKING_STATUS, LockStatus.LOCKING),
+        (JAMMED_STATUS, LockStatus.JAMMED),
+    )
+    for token in tokens
+}
+
+_DOOR_STATE_BY_TOKEN = {
+    token.lower(): door_state
+    for tokens, door_state in (
+        (CLOSED_STATUS, LockDoorStatus.CLOSED),
+        (OPEN_STATUS, LockDoorStatus.OPEN),
+        (DISABLE_STATUS, LockDoorStatus.DISABLED),
+    )
+    for token in tokens
+    if token is not None
+}
 
 
-def determine_door_state(status):
-    if status in CLOSED_STATUS:
-        return LockDoorStatus.CLOSED
-    if status in OPEN_STATUS:
-        return LockDoorStatus.OPEN
-    if status in DISABLE_STATUS:
+def determine_lock_status(status: str | None) -> LockStatus:
+    if status is None:
+        return LockStatus.UNKNOWN
+    return _LOCK_STATUS_BY_TOKEN.get(status.lower(), LockStatus.UNKNOWN)
+
+
+def determine_door_state(status: str | None) -> LockDoorStatus:
+    if status is None:
         return LockDoorStatus.DISABLED
-    return LockDoorStatus.UNKNOWN
+    return _DOOR_STATE_BY_TOKEN.get(status.lower(), LockDoorStatus.UNKNOWN)
 
 
 def door_state_to_string(door_status):
