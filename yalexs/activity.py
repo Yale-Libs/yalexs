@@ -54,6 +54,7 @@ ACTION_DOORBELL_CALL_INITIATED = "doorbell_call_initiated"
 ACTION_DOORBELL_MOTION_DETECTED = "doorbell_motion_detected"
 ACTION_DOORBELL_CALL_MISSED = "doorbell_call_missed"
 ACTION_DOORBELL_CALL_HANGUP = "doorbell_call_hangup"
+ACTION_DOORBELL_CALL_BUTTON_PRESS = "doorbell_call_button_press"
 ACTION_LOCK_DOORBELL_BUTTON_PUSHED = "lock_accessory_motion_detect"
 
 ACTION_BRIDGE_ONLINE = "associated_bridge_online"  # pubnub only
@@ -67,6 +68,7 @@ ACTIVITY_ACTIONS_DOORBELL_DING = {
     ACTION_DOORBELL_BUTTON_PUSHED,
     ACTION_DOORBELL_CALL_MISSED,
     ACTION_DOORBELL_CALL_HANGUP,
+    ACTION_DOORBELL_CALL_BUTTON_PRESS,
     ACTION_LOCK_DOORBELL_BUTTON_PUSHED,
 }
 ACTIVITY_ACTIONS_DOORBELL_IMAGE_CAPTURE = {ACTION_DOORBELL_IMAGE_CAPTURE}
@@ -424,7 +426,11 @@ class DoorbellBaseActionActivity(Activity):
     @cached_property
     def image_url(self):
         """Return the image URL of the activity."""
-        return self._info.get("image") or self._info.get("attachment")
+        return (
+            self._info.get("image")
+            or self._info.get("attachment")
+            or self._data.get("attachment")
+        )
 
     @cached_property
     def activity_start_time(self):
