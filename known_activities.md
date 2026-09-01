@@ -216,3 +216,35 @@
   }
 }
 ```
+
+## doorbell_call_button_press
+
+Button press on a Yale Smart Video Doorbell (`eagle_doorbell`, Yale "aa"
+platform). These doorbells do not push over PubNub/websocket; the press only
+appears in the house activity feed (`/houses/<houseId>/activities`).
+
+```
+{
+  "id": "<activityId>",
+  "timestamp": <epochTimestampMs>,
+  "icon": "https://activity-icon.aaecosystem.com/app/ActivityFeedIcons/doorbell_detected_doorbell_ring@3x.png",
+  "action": "doorbell_call_button_press",
+  "deviceID": "<doorbellId>",
+  "deviceType": "doorbell",
+  "attachment": "https://videocontent.aaecosystem.com/<houseId>/<doorbellId>/images/<activityId>.jpeg",
+  "attachmentWidth": 1920,
+  "attachmentHeight": 1080,
+  "doorbell": {
+    "contentToken": "<jwt>",
+    "dvrID": "<activityId>",
+    "videoUploadProgress": "not_started",
+    "videoAvailable": false,
+    "videoRecordingState": "recording_ongoing",
+    "eventContainsVideoContent": true
+  },
+  "reason": "DOORBELL_RING",
+  "otherReasonIcons": [],
+  "userActions": [],
+  "title": "<b><deviceName></b> pressed in <b><houseName></b>"
+}
+```
