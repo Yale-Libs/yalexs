@@ -96,6 +96,12 @@ def activities_from_pubnub_message(  # noqa: C901
         # Mark manual operations so they're not treated as status updates
         elif calling_user_id and calling_user_id.startswith("manual"):
             activity_dict["info"]["manual"] = True
+        # Any other calling user id means somebody operated the lock, even
+        # though the id is not trusted for attribution above. Mark it so the
+        # activity is not discarded as a plain state broadcast; the operator's
+        # name is filled in later from the activity log.
+        elif calling_user_id:
+            activity_dict["info"]["operator"] = True
         if "remoteEvent" in message:
             activity_dict["info"]["remote"] = True
         error = message.get("error") or {}

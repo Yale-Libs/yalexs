@@ -708,6 +708,88 @@ def test_lock_message_uses_context_start_date_when_start_time_missing():
     assert activities[0].operated_by is None or True  # smoke check, user accepted
 
 
+def test_lock_message_with_calling_user_is_an_operation():
+    """A push naming a calling user is an operation, not a status broadcast.
+
+    August sends these with no "info" key at all, so the id cannot be trusted
+    for attribution, but the lock was still operated by somebody.
+    """
+    lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+    activities = activities_from_pubnub_message(
+        lock,
+        dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+        {
+            "status": "unlocked",
+            "callingUserID": "cccca94e-373e-aaaa-bbbb-333396827777",
+        },
+    )
+    assert len(activities) == 1
+    assert activities[0].action == "unlock"
+    assert activities[0].is_status is False
+    # The id is still not accepted for attribution: without a startTime the
+    # push may be a replay of an earlier activity, so the operator is left to
+    # be filled in from the activity log.
+    assert activities[0].operated_by is None
+    assert activities[0].activity_type is ActivityType.LOCK_OPERATION_WITHOUT_OPERATOR
+
+
+def test_lock_message_without_calling_user_is_still_a_status_update():
+    """A push with no calling user at all remains a status broadcast."""
+    lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+    activities = activities_from_pubnub_message(
+        lock,
+        dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+        {"status": "unlocked"},
+    )
+    assert len(activities) == 1
+    assert activities[0].is_status is True
+
+
+def test_automatic_relock_push_is_an_operation():
+    """An automatic relock names a calling user and is an operation."""
+    lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+    activities = activities_from_pubnub_message(
+        lock,
+        dateutil.parser.parse("2017-12-10T05:48:30.272Z"),
+        {"status": "locked", "callingUserID": "automaticrelock"},
+    )
+    assert len(activities) == 1
+    assert activities[0].is_status is False
+
+
+def test_both_pushes_for_one_operation_are_operations():
+    """August pushes each operation twice; neither copy may be discarded.
+
+    The bolt-movement notification arrives first with a ``manual<action>``
+    sentinel and no operator, then the same operation is pushed again about a
+    second later carrying the operating user's real id.
+    """
+    lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+
+    bolt_movement = activities_from_pubnub_message(
+        lock,
+        dateutil.parser.parse("2017-12-10T05:48:34.315Z"),
+        {
+            "status": "unlocked",
+            "callingUserID": "manualunlock",
+            "doorState": "init",
+        },
+    )
+    named_operator = activities_from_pubnub_message(
+        lock,
+        dateutil.parser.parse("2017-12-10T05:48:35.580Z"),
+        {
+            "status": "unlocked",
+            "callingUserID": "cccca94e-373e-aaaa-bbbb-333396827777",
+        },
+    )
+
+    assert bolt_movement[0].action == "unlock"
+    assert bolt_movement[0].is_status is False
+    assert named_operator[0].action == "unlock"
+    assert named_operator[0].is_status is False
+
+
 def test_doorbell_message_without_status_returns_empty():
     """Cover the 116->130 branch: DoorbellDetail but no DOORBELL_STATUS_KEY."""
     doorbell = DoorbellDetail(json.loads(load_fixture("get_doorbell.json")))
