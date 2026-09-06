@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,6 +13,7 @@ from yalexs.activity import Activity, ActivityType
 from yalexs.api_async import ApiAsync
 from yalexs.exceptions import AugustApiAIOHTTPError
 from yalexs.manager.activity import (
+    ACTIVITY_CATCH_UP_DELAYS,
     ACTIVITY_CATCH_UP_FETCH_LIMIT,
     ACTIVITY_DEBOUNCE_COOLDOWN,
     ACTIVITY_STREAM_FETCH_LIMIT,
@@ -39,6 +41,24 @@ def _make_activity(
     return activity
 
 
+def _serve_a_new_activity_each_poll(async_get_house_activities: AsyncMock) -> None:
+    """Make every poll return an activity newer than the last one.
+
+    Tests that only care about the poll schedule use this so the catch up
+    delays never engage. Returning nothing, or the same activity twice, means
+    the api owes us an activity and ACTIVITY_CATCH_UP_DELAYS keeps polling.
+    """
+    minutes = itertools.count()
+    async_get_house_activities.side_effect = lambda *_args, **_kwargs: [
+        _make_activity(
+            "dev",
+            ActivityType.LOCK_OPERATION,
+            datetime(2026, 1, 1, tzinfo=timezone.utc)
+            + timedelta(minutes=next(minutes)),
+        )
+    ]
+
+
 def _build_stream(
     house_ids: set[str] | None = None,
     push_connected: bool = False,
@@ -64,6 +84,7 @@ async def test_activity_stream_debounce(freezer: FrozenDateTimeFactory) -> None:
 
     api = MagicMock(spec=ApiAsync)
     async_get_house_activities = AsyncMock()
+    _serve_a_new_activity_each_poll(async_get_house_activities)
     api.async_get_house_activities = async_get_house_activities
     august_gateway = MagicMock(spec=Gateway)
     august_gateway.async_refresh_access_token_if_needed = AsyncMock()
@@ -189,6 +210,7 @@ async def test_activity_stream_debounce_during_init(
 
     api = MagicMock(spec=ApiAsync)
     async_get_house_activities = AsyncMock()
+    _serve_a_new_activity_each_poll(async_get_house_activities)
     api.async_get_house_activities = async_get_house_activities
     august_gateway = MagicMock(spec=Gateway)
     august_gateway.async_refresh_access_token_if_needed = AsyncMock()
@@ -231,6 +253,141 @@ async def test_activity_stream_debounce_during_init(
     await asyncio.sleep(0)
     assert async_get_house_activities.call_count == 2
     assert "myhouseid" not in activity._schedule_updates
+
+
+async def _resynced_stream(
+    freezer: FrozenDateTimeFactory,
+) -> tuple[ActivityStream, AsyncMock]:
+    """Build a stream that is past the initial resync with a silent api."""
+    stream, _api, async_get = _build_stream(house_ids={"myhouseid"})
+    async_get.return_value = []
+    await stream.async_setup()
+    await asyncio.sleep(0)
+    freezer.tick(INITIAL_LOCK_RESYNC_TIME + 1)
+    fire_time_changed()
+    await asyncio.sleep(0)
+    async_get.reset_mock()
+    async_get.return_value = []
+    return stream, async_get
+
+
+async def _advance(freezer: FrozenDateTimeFactory, seconds: float) -> None:
+    """Move the clock forward and let anything due run."""
+    freezer.tick(seconds)
+    fire_time_changed()
+    await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_catch_up_polls_while_the_activity_api_stays_silent(
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A push whose activity never lands keeps polling on the catch up delays.
+
+    August has been observed to withhold a pin unlock for over a minute. The
+    two scheduled polls finish inside 8 seconds, so without the catch up the
+    operator's name is only picked up if some later operation happens to
+    schedule another poll.
+    """
+    stream, async_get = await _resynced_stream(freezer)
+
+    stream.async_schedule_house_id_refresh("myhouseid")
+    await _advance(freezer, UPDATE_SOON)
+    assert async_get.call_count == 1
+    await _advance(freezer, ACTIVITY_DEBOUNCE_COOLDOWN + 1)
+    assert async_get.call_count == 2
+
+    # Both polls came back empty, so the api still owes us an activity.
+    for poll, delay in enumerate(ACTIVITY_CATCH_UP_DELAYS, start=1):
+        await _advance(freezer, delay)
+        assert async_get.call_count == 2 + poll
+
+    expected = 2 + len(ACTIVITY_CATCH_UP_DELAYS)
+    # The delays are spent; nothing else is scheduled.
+    await _advance(freezer, max(ACTIVITY_CATCH_UP_DELAYS) * 2)
+    assert async_get.call_count == expected
+    assert "myhouseid" not in stream._schedule_updates
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_catch_up_stops_once_the_activity_arrives(
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The first poll that serves something ends the catch up sequence."""
+    stream, async_get = await _resynced_stream(freezer)
+
+    stream.async_schedule_house_id_refresh("myhouseid")
+    await _advance(freezer, UPDATE_SOON)
+    await _advance(freezer, ACTIVITY_DEBOUNCE_COOLDOWN + 1)
+    assert async_get.call_count == 2
+
+    # The activity api publishes just before the first catch up poll.
+    async_get.return_value = [
+        _make_activity(
+            "dev",
+            ActivityType.LOCK_OPERATION,
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+    ]
+    await _advance(freezer, ACTIVITY_CATCH_UP_DELAYS[0])
+    assert async_get.call_count == 3
+
+    await _advance(freezer, sum(ACTIVITY_CATCH_UP_DELAYS))
+    assert async_get.call_count == 3
+    assert stream._awaiting_activity["myhouseid"] is False
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_catch_up_survives_a_failing_poll(
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A poll that errors leaves the api still owing us an activity.
+
+    _async_update_house_id swallows request errors, so without the catch up a
+    transient failure during both scheduled polls loses the operation.
+    """
+    stream, async_get = await _resynced_stream(freezer)
+    async_get.side_effect = ClientError("boom")
+
+    stream.async_schedule_house_id_refresh("myhouseid")
+    await _advance(freezer, UPDATE_SOON)
+    await _advance(freezer, ACTIVITY_DEBOUNCE_COOLDOWN + 1)
+    assert async_get.call_count == 2
+
+    async_get.side_effect = None
+    async_get.return_value = [
+        _make_activity(
+            "dev",
+            ActivityType.LOCK_OPERATION,
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+    ]
+    await _advance(freezer, ACTIVITY_CATCH_UP_DELAYS[0])
+    assert async_get.call_count == 3
+    assert stream._awaiting_activity["myhouseid"] is False
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
+async def test_a_new_push_restarts_the_catch_up_budget(
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Each push gets its own set of catch up delays."""
+    stream, async_get = await _resynced_stream(freezer)
+
+    stream.async_schedule_house_id_refresh("myhouseid")
+    await _advance(freezer, UPDATE_SOON)
+    await _advance(freezer, ACTIVITY_DEBOUNCE_COOLDOWN + 1)
+    await _advance(freezer, ACTIVITY_CATCH_UP_DELAYS[0])
+    assert async_get.call_count == 3
+    assert stream._catch_up_polls["myhouseid"] == 2
+
+    stream.async_schedule_house_id_refresh("myhouseid")
+    assert stream._catch_up_polls["myhouseid"] == 0
+    assert stream._awaiting_activity["myhouseid"] is True
+    stream.async_stop()
 
 
 @pytest.mark.asyncio

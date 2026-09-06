@@ -36,6 +36,16 @@ ACTIVITY_DEBOUNCE_COOLDOWN = 4.0
 # message and the activity API to be updated.
 UPDATE_SOON = 3.0
 
+# A push tells us the lock was operated, but the activity API sometimes has not
+# published the matching activity by the time the polls above are done. It has
+# been observed to withhold one for over a minute, far outside the debounce
+# window, and until it arrives the operation has no operator. Keep asking on a
+# widening gap, measured from the end of the previous poll. These only run
+# while the API has served nothing at all since the push, and stop as soon as
+# it serves something, so a house whose activities publish promptly never
+# reaches them.
+ACTIVITY_CATCH_UP_DELAYS = (10.0, 30.0, 60.0, 120.0)
+
 NEVER_TIME = -86400.0
 
 
@@ -64,6 +74,10 @@ class ActivityStream(SubscriberMixin):
         self._last_update_time: dict[str, float] = dict.fromkeys(house_ids, NEVER_TIME)
         self._start_time: float | None = None
         self._pending_updates: dict[str, int] = dict.fromkeys(house_ids, 1)
+        # Set when a push schedules a refresh, cleared once the activity API
+        # serves anything. While set, the catch up delays keep polling.
+        self._awaiting_activity: dict[str, bool] = dict.fromkeys(house_ids, False)
+        self._catch_up_polls: dict[str, int] = dict.fromkeys(house_ids, 0)
         self._loop = asyncio.get_running_loop()
         self._shutdown: bool = False
 
@@ -200,14 +214,41 @@ class ActivityStream(SubscriberMixin):
         """Execute a scheduled update."""
         self._pending_updates[house_id] -= 1
         self._last_update_time[house_id] = self._loop.time()
-        await self._async_update_house_id(house_id)
+        if await self._async_update_house_id(house_id):
+            # The API produced what the push told us to expect, so stop asking.
+            self._awaiting_activity[house_id] = False
+        now = self._loop.time()
         if (pending_count := self._pending_updates[house_id]) > 0:
             _LOGGER.debug(
                 "There are %s pending updates for house id %s", pending_count, house_id
             )
-            now = self._loop.time()
             delay = self._determine_update_delay(house_id, now)
             self._async_schedule_update(house_id, now, delay)
+        elif (delay := self._catch_up_delay(house_id)) is not None:
+            _LOGGER.debug(
+                "Activity api has not caught up for house id %s, polling again in %s seconds",
+                house_id,
+                delay,
+            )
+            self._catch_up_polls[house_id] += 1
+            self._pending_updates[house_id] = 1
+            self._async_schedule_update(house_id, now, delay)
+
+    def _catch_up_delay(self, house_id: str) -> float | None:
+        """Return how long to wait before polling for an activity that is late.
+
+        Returns None unless a push scheduled a refresh, every poll since has
+        come back with nothing, and we have delays left to spend.
+        """
+        if not self._awaiting_activity[house_id]:
+            return None
+        if (poll := self._catch_up_polls[house_id]) >= len(ACTIVITY_CATCH_UP_DELAYS):
+            _LOGGER.debug(
+                "Giving up waiting for the activity api to catch up for house id %s",
+                house_id,
+            )
+            return None
+        return ACTIVITY_CATCH_UP_DELAYS[poll]
 
     def _initial_resync_complete(self, now: float) -> bool:
         """Return if the initial resync is complete."""
@@ -215,16 +256,18 @@ class ActivityStream(SubscriberMixin):
 
     def _set_update_count(self, house_id: str, now: float) -> None:
         """Set the update count."""
-        # Schedule one update soon and two updates past the debounce time
+        # Schedule one update soon and a second past the debounce time
         # to ensure we catch the case where the activity
         # api does not update right away and we need to poll
         # it again. Sometimes the lock operator or a doorbell
         # will not show up in the activity stream right away.
+        # If neither poll comes back with anything, ACTIVITY_CATCH_UP_DELAYS
+        # keeps asking for a few minutes.
         # Only do additional polls if we are past
         # the initial lock resync time to avoid a storm
         # of activity at setup.
         if not self._initial_resync_complete(now):
-            # No resync yet, above spamming the API
+            # No resync yet, avoid spamming the API
             update_count = 1
         else:
             # Initial resync complete, we can do 2 updates
@@ -235,6 +278,11 @@ class ActivityStream(SubscriberMixin):
         """Update for a house activities now and once in the future."""
         self._async_cancel_future_updates(house_id)
         now = self._loop.time()
+        # Something happened, so the activity api owes us an activity. Spend a
+        # fresh set of catch up delays waiting for it if the polls below come
+        # back empty.
+        self._awaiting_activity[house_id] = True
+        self._catch_up_polls[house_id] = 0
         self._set_update_count(house_id, now)
         delay = self._determine_update_delay(house_id, now)
         self._async_schedule_update(house_id, now, delay)
@@ -245,13 +293,14 @@ class ActivityStream(SubscriberMixin):
             return ACTIVITY_STREAM_FETCH_LIMIT
         return ACTIVITY_CATCH_UP_FETCH_LIMIT
 
-    async def _async_update_house_id(self, house_id: str) -> None:
+    async def _async_update_house_id(self, house_id: str) -> bool:
         """Update device activities for a house.
 
-        Must only be called from _async_execute_schedule_update
+        Returns True if the api served an activity newer than the one we
+        already had. Must only be called from _async_execute_schedule_update
         """
         if self._shutdown:
-            return
+            return False
 
         _LOGGER.debug("Updating device activity for house id %s", house_id)
         try:
@@ -267,19 +316,22 @@ class ActivityStream(SubscriberMixin):
                 ex,
             )
             # Make sure we process the next house if one of them fails
-            return
+            return False
 
         _LOGGER.debug(
             "Completed retrieving device activities for house id %s", house_id
         )
+        served_newer = False
         # Signal between yields so subscribers observe every activity in order.
         for activity in self._iter_newer_device_activities(activities):
+            served_newer = True
             device_id = activity.device_id
             _LOGGER.debug(
                 "async_signal_device_id_update (from activity stream): %s",
                 device_id,
             )
             self.async_signal_device_id_update(device_id)
+        return served_newer
 
     def async_process_newer_device_activities(
         self, activities: list[Activity]
