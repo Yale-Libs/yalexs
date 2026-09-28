@@ -49,6 +49,15 @@ _BRIDGE_ACTIONS = {ACTION_BRIDGE_ONLINE, ACTION_BRIDGE_OFFLINE}
 _LOGGER = logging.getLogger(__name__)
 
 
+def is_operator_calling_user(calling_user_id: str | None) -> bool:
+    """Return if a push's calling user id names who operated the lock.
+
+    August pushes each operation twice: once with a ``manual<action>``
+    sentinel in place of a user, and again with the operating user's id.
+    """
+    return bool(calling_user_id) and not calling_user_id.startswith("manual")
+
+
 def activities_from_pubnub_message(  # noqa: C901
     device: Device,
     date_time: datetime,
@@ -76,7 +85,8 @@ def activities_from_pubnub_message(  # noqa: C901
 
     if isinstance(device, LockDetail):
         activity_dict["deviceType"] = "lock"
-        activity_dict["info"] = info
+        # Copy so the markers set below do not leak back into the push message
+        activity_dict["info"] = dict(info)
         calling_user_id = message.get("callingUserID")
 
         # Some locks sometimes send lots of status messages, triggered by the app. Ignore these.
@@ -100,7 +110,7 @@ def activities_from_pubnub_message(  # noqa: C901
         # though the id is not trusted for attribution above. Mark it so the
         # activity is not discarded as a plain state broadcast; the operator's
         # name is filled in later from the activity log.
-        elif calling_user_id:
+        elif is_operator_calling_user(calling_user_id):
             activity_dict["info"]["operator"] = True
         if "remoteEvent" in message:
             activity_dict["info"]["remote"] = True

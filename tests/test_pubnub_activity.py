@@ -790,6 +790,28 @@ def test_both_pushes_for_one_operation_are_operations():
     assert named_operator[0].is_status is False
 
 
+def test_lock_message_markers_do_not_mutate_the_push():
+    """Markers are written to the activity's info, not the caller's message."""
+    lock = LockDetail(json.loads(load_fixture("get_lock.doorsense_init.json")))
+    for calling_user_id, marker in (
+        ("manualunlock", "manual"),
+        ("cccca94e-373e-aaaa-bbbb-333396827777", "operator"),
+    ):
+        message = {
+            "status": "unlocked",
+            "callingUserID": calling_user_id,
+            "remoteEvent": 1,
+            "info": {"action": "unlock"},
+        }
+        activities = activities_from_pubnub_message(
+            lock, dateutil.parser.parse("2017-12-10T05:48:30.272Z"), message
+        )
+        assert activities[0].is_status is False
+        assert activities[0]._info[marker] is True
+        assert activities[0]._info["remote"] is True
+        assert message["info"] == {"action": "unlock"}
+
+
 def test_doorbell_message_without_status_returns_empty():
     """Cover the 116->130 branch: DoorbellDetail but no DOORBELL_STATUS_KEY."""
     doorbell = DoorbellDetail(json.loads(load_fixture("get_doorbell.json")))
