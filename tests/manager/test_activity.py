@@ -307,6 +307,31 @@ async def test_catch_up_polls_while_the_activity_api_stays_silent(
 
 
 @pytest.mark.asyncio
+async def test_prompt_publish_costs_no_extra_polls(
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A push whose activity is served on the first poll polls twice, as before.
+
+    The catch up only spends api calls while an activity is missing, so a
+    house whose activities publish promptly makes the same calls as without it.
+    """
+    stream, async_get = await _resynced_stream(freezer)
+
+    stream.async_schedule_house_id_refresh("myhouseid", "lockA")
+    async_get.return_value = _served("lockA")
+    await _advance(freezer, UPDATE_SOON)
+    assert async_get.call_count == 1
+    async_get.return_value = []
+    await _advance(freezer, ACTIVITY_DEBOUNCE_COOLDOWN + 1)
+    assert async_get.call_count == 2
+
+    await _advance(freezer, sum(ACTIVITY_CATCH_UP_DELAYS) * 2)
+    assert async_get.call_count == 2
+    assert "myhouseid" not in stream._schedule_updates
+    stream.async_stop()
+
+
+@pytest.mark.asyncio
 async def test_catch_up_stops_once_the_activity_arrives(
     freezer: FrozenDateTimeFactory,
 ) -> None:
