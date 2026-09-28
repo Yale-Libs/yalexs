@@ -652,6 +652,20 @@ def test_is_status_manual_user_id_is_not_status() -> None:
     assert activity.is_status is False
 
 
+def test_is_status_operator_marked_info_is_not_status() -> None:
+    # info["operator"] marks a push that named a calling user we could not
+    # trust for attribution. It is still an operation, not a status update.
+    activity = Activity(
+        SOURCE_PUBNUB,
+        {
+            "dateTime": 1700000000000,
+            "action": "unlock",
+            "info": {"operator": True},
+        },
+    )
+    assert activity.is_status is False
+
+
 def test_motion_activity_image_created_at_fallback() -> None:
     # Image dict without "created_at" → falls back to activity_start_time.
     activity = DoorbellMotionActivity(

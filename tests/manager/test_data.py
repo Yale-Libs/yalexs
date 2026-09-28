@@ -549,6 +549,118 @@ class TestPushMessageForUnknownDevice:
         assert data.signaled == [device_id]
 
 
+class TestOperatorPushSchedulesRefresh:
+    """A push naming the operating user schedules a refresh end to end.
+
+    August pushes a keypad unlock twice: a bolt-movement push carrying a
+    ``manual<action>`` sentinel, then a copy carrying the operating user's real
+    id. The copy repeats the sentinel's state, so the unchanged-state gate must
+    not swallow it before the refresh loop sees it.
+    """
+
+    USER_ID = "cccca94e-373e-aaaa-bbbb-333396827777"
+
+    def _build_data(self) -> Any:
+        lock = LockDetail(
+            {
+                "LockID": "LOCK_ID",
+                "LockName": "Front Door",
+                "HouseID": "house",
+                "SerialNumber": "SERIAL",
+                "Type": 5,
+                "battery": 0.8,
+                "currentFirmwareVersion": "1.0.0",
+                "LockStatus": {"status": "locked"},
+            }
+        )
+
+        class TestData:
+            def __init__(self):
+                self._last_push_state = {}
+                self._device_detail_by_id = {lock.device_id: lock}
+                self.activity_stream = Mock()
+                self.activity_stream.async_process_newer_device_activities = Mock(
+                    return_value=True
+                )
+                self.activity_stream.async_schedule_house_id_refresh = Mock()
+
+            _is_unchanged_push_state = YaleXSData._is_unchanged_push_state
+            _async_handle_push_message = YaleXSData._async_handle_push_message
+            get_device_detail = YaleXSData.get_device_detail
+
+            def async_signal_device_id_update(self, device_id):
+                pass
+
+        return TestData()
+
+    def _push(self, data: Any, message: dict[str, Any]) -> bool:
+        """Deliver a push and return whether it scheduled a refresh."""
+        refresh = data.activity_stream.async_schedule_house_id_refresh
+        refresh.reset_mock()
+        data._async_handle_push_message(
+            "LOCK_ID", datetime.now(timezone.utc), message, SOURCE_PUBNUB
+        )
+        return refresh.called
+
+    def test_operator_push_without_door_state(self):
+        """The copy omits doorState, so its state differs from the sentinel's."""
+        data = self._build_data()
+        assert self._push(
+            data,
+            {
+                "status": "unlocked",
+                "callingUserID": "manualunlock",
+                "doorState": "init",
+            },
+        )
+        assert self._push(data, {"status": "unlocked", "callingUserID": self.USER_ID})
+
+    def test_operator_push_repeating_the_sentinel_state(self):
+        """With DoorSense reporting, both copies carry the same doorState."""
+        data = self._build_data()
+        assert self._push(
+            data,
+            {
+                "status": "unlocked",
+                "callingUserID": "manualunlock",
+                "doorState": "closed",
+            },
+        )
+        assert self._push(
+            data,
+            {
+                "status": "unlocked",
+                "callingUserID": self.USER_ID,
+                "doorState": "closed",
+            },
+        )
+
+    def test_repeated_sentinel_is_still_unchanged(self):
+        """A sentinel repeating the recorded state is still dropped."""
+        data = self._build_data()
+        message = {
+            "status": "unlocked",
+            "callingUserID": "manualunlock",
+            "doorState": "closed",
+        }
+        assert self._push(data, message)
+        assert not self._push(data, dict(message))
+
+    def test_status_broadcast_after_operator_push_does_not_refresh(self):
+        """A push with no calling user remains a status broadcast."""
+        data = self._build_data()
+        assert self._push(
+            data,
+            {
+                "status": "unlocked",
+                "callingUserID": self.USER_ID,
+                "doorState": "closed",
+            },
+        )
+        assert not self._push(data, {"status": "unlocked", "doorState": "closed"})
+        assert not self._push(data, {"status": "locked", "doorState": "closed"})
+
+
 @pytest.mark.asyncio
 async def test_fetch_lock_capabilities() -> None:
     """Test that lock capabilities are fetched and set correctly."""
