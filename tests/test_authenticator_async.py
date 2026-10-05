@@ -119,7 +119,7 @@ class TestAuthenticatorAsync(unittest.IsolatedAsyncioTestCase):
         authenticator = await self._async_create_authenticator_async(mock_aioresponses)
         await authenticator.async_authenticate()
 
-        token = "e30=.eyJleHAiOjEzMzd9.e30="
+        token = "e30.eyJleHAiOjEzMzd9.e30"
         mock_aioresponses.get(
             ApiCommon(DEFAULT_BRAND).get_brand_url(API_GET_HOUSES_URL),
             body=token,
