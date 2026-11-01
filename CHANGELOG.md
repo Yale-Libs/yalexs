@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v9.2.14 (2026-11-01)
+
+### Bug Fixes
+
+- Remove padding from refresh token fixture ([#456](https://github.com/Yale-Libs/yalexs/pull/456),
+  [`66b1ad3`](https://github.com/Yale-Libs/yalexs/commit/66b1ad32b9f9a7bdb2c0268dfdbf65cf4544ef65))
+
+
 ## v9.2.13 (2026-08-24)
 
 ### Bug Fixes
