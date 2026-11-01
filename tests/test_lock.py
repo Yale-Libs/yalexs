@@ -62,10 +62,18 @@ def test_lock_is_operable_false_for_regular_user() -> None:
 
 
 def test_lock_status_setter_rejects_non_enum(online_lock: LockDetail) -> None:
-    # Python 3.11 raises TypeError on `"str" in EnumClass`; 3.12+ returns False
-    # and the setter then raises ValueError. Accept either.
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(ValueError):
         online_lock.lock_status = "definitely-not-a-status"  # type: ignore[assignment]
+
+
+def test_lock_status_setter_rejects_value_matching_string(
+    online_lock: LockDetail,
+) -> None:
+    # A raw string equal to an enum *value* ("locked") must still be rejected.
+    # `"locked" in LockStatus` is True on Python 3.12+, so the old membership
+    # check silently accepted and stored the string instead of the enum.
+    with pytest.raises(ValueError):
+        online_lock.lock_status = LockStatus.LOCKED.value  # type: ignore[assignment]
 
 
 def test_lock_status_setter_accepts_enum(online_lock: LockDetail) -> None:
@@ -89,10 +97,17 @@ def test_lock_status_datetime_setter_accepts_datetime(
 
 
 def test_door_state_setter_rejects_non_enum(online_lock: LockDetail) -> None:
-    # Python 3.11 raises TypeError on `"str" in EnumClass`; 3.12+ returns False
-    # and the setter then raises ValueError. Accept either.
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(ValueError):
         online_lock.door_state = "definitely-not-a-door-state"  # type: ignore[assignment]
+
+
+def test_door_state_setter_rejects_value_matching_string(
+    online_lock: LockDetail,
+) -> None:
+    # `"closed" in LockDoorStatus` is True on Python 3.12+; the setter must
+    # still reject the raw string and only accept a LockDoorStatus enum.
+    with pytest.raises(ValueError):
+        online_lock.door_state = LockDoorStatus.CLOSED.value  # type: ignore[assignment]
 
 
 def test_door_state_setter_unknown_does_not_enable_doorsense(
