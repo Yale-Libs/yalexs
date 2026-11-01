@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from enum import Enum
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from ._compat import cached_property
@@ -38,6 +40,8 @@ DISABLE_STATUS = ("init", "kAugDoorState_Init", "", None)
 
 LOCK_STATUS_KEY = "status"
 DOOR_STATE_KEY = "doorState"
+
+_LOGGER = logging.getLogger(__name__)
 
 DOORMAN_MODEL_TYPES = {7, 10}
 UNLATCH_MODEL_TYPES = {17}
@@ -287,6 +291,23 @@ class LockOperation(Enum):
     OPEN = "open"
 
 
+@lru_cache(maxsize=64)
+def _warn_unknown_status(kind: str, status: str) -> None:
+    """Warn once per unrecognized vendor token.
+
+    Vendors ship new spellings for the same physical state (``secure`` /
+    ``securemode`` / ``kAugLockState_SecureMode``, ...). An unmapped token
+    degrades to ``UNKNOWN``, which reads to the user as "the lock broke".
+    Naming the token makes the gap reportable instead of invisible.
+    """
+    _LOGGER.warning(
+        "Unrecognized %s %r reported by the API; the state will be UNKNOWN. "
+        "Please report this value at https://github.com/Yale-Libs/yalexs/issues",
+        kind,
+        status,
+    )
+
+
 def determine_lock_status(status: str) -> LockStatus:
     if status in LOCKED_STATUS:
         return LockStatus.LOCKED
@@ -302,6 +323,8 @@ def determine_lock_status(status: str) -> LockStatus:
         return LockStatus.LOCKING
     if status in JAMMED_STATUS:
         return LockStatus.JAMMED
+    if status:
+        _warn_unknown_status("lock status", status)
     return LockStatus.UNKNOWN
 
 
@@ -312,6 +335,8 @@ def determine_door_state(status):
         return LockDoorStatus.OPEN
     if status in DISABLE_STATUS:
         return LockDoorStatus.DISABLED
+    if status:
+        _warn_unknown_status("door state", status)
     return LockDoorStatus.UNKNOWN
 
 

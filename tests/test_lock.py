@@ -11,10 +11,16 @@ import pytest
 
 from yalexs.bridge import BridgeStatus
 from yalexs.lock import (
+    CLOSED_STATUS,
+    JAMMED_STATUS,
+    LOCKED_STATUS,
+    OPEN_STATUS,
+    UNLOCKED_STATUS,
     Lock,
     LockDetail,
     LockDoorStatus,
     LockStatus,
+    _warn_unknown_status,
     determine_door_state,
     determine_lock_status,
     door_state_to_string,
@@ -224,3 +230,49 @@ def test_determine_door_state_known_states_and_fallback() -> None:
     assert determine_door_state("init") is LockDoorStatus.DISABLED
     assert determine_door_state(None) is LockDoorStatus.DISABLED
     assert determine_door_state("bogus") is LockDoorStatus.UNKNOWN
+
+
+@pytest.fixture(autouse=True)
+def _reset_unknown_status_warnings() -> None:
+    """The warning is deduped for the process lifetime; isolate each test."""
+    _warn_unknown_status.cache_clear()
+
+
+def test_unknown_lock_status_is_reported(caplog: pytest.LogCaptureFixture) -> None:
+    """An unmapped vendor token must name itself in the log, not fail silently."""
+    with caplog.at_level("WARNING", logger="yalexs.lock"):
+        assert determine_lock_status("securemode_v2") is LockStatus.UNKNOWN
+        assert determine_lock_status("securemode_v2") is LockStatus.UNKNOWN
+
+    assert caplog.text.count("securemode_v2") == 1
+    assert "lock status" in caplog.text
+
+
+def test_unknown_door_state_is_reported(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING", logger="yalexs.lock"):
+        assert determine_door_state("ajar") is LockDoorStatus.UNKNOWN
+
+    assert "ajar" in caplog.text
+    assert "door state" in caplog.text
+
+
+@pytest.mark.parametrize("status", [None, ""])
+def test_absent_status_is_not_reported(
+    status: str | None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Locks without doorsense/status report nothing; that is not a gap."""
+    with caplog.at_level("WARNING", logger="yalexs.lock"):
+        assert determine_lock_status(status) is LockStatus.UNKNOWN
+        assert determine_door_state(status) is LockDoorStatus.DISABLED
+
+    assert caplog.text == ""
+
+
+def test_known_tokens_are_never_reported(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING", logger="yalexs.lock"):
+        for token in (*LOCKED_STATUS, *UNLOCKED_STATUS, *JAMMED_STATUS):
+            determine_lock_status(token)
+        for token in (*CLOSED_STATUS, *OPEN_STATUS):
+            determine_door_state(token)
+
+    assert caplog.text == ""

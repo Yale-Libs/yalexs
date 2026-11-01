@@ -4,6 +4,7 @@ import os
 import unittest
 
 import dateutil.parser
+import pytest
 from dateutil.tz import tzlocal
 
 from yalexs.activity import (
@@ -26,6 +27,7 @@ from yalexs.lock import (
     LockDetail,
     LockDoorStatus,
     LockStatus,
+    _warn_unknown_status,
 )
 from yalexs.pubnub_activity import activities_from_pubnub_message
 from yalexs.users import cache_user_info, get_user_info
@@ -743,3 +745,35 @@ def test_unknown_device_type_returns_empty():
         {"status": "kAugLockState_Locked"},
     )
     assert activities == []
+
+
+def test_unknown_lock_status_push_is_reported(caplog: pytest.LogCaptureFixture) -> None:
+    """A vendor token we cannot map drops the push; say so instead of going quiet."""
+    _warn_unknown_status.cache_clear()
+    lock = LockDetail(json.loads(load_fixture("get_lock.online.json")))
+
+    with caplog.at_level("WARNING", logger="yalexs.lock"):
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2021-03-16T01:07:08.817Z"),
+            {"lockAction": "kAugLockState_BrandNewSpelling", "lockID": "xxx"},
+        )
+
+    assert activities == []
+    assert "kAugLockState_BrandNewSpelling" in caplog.text
+
+
+def test_bridge_action_push_is_not_reported(caplog: pytest.LogCaptureFixture) -> None:
+    """Bridge online/offline are not lock statuses and must not look unmapped."""
+    _warn_unknown_status.cache_clear()
+    lock = LockDetail(json.loads(load_fixture("get_lock.online.json")))
+
+    with caplog.at_level("WARNING", logger="yalexs.lock"):
+        activities = activities_from_pubnub_message(
+            lock,
+            dateutil.parser.parse("2021-03-16T01:07:08.817Z"),
+            {LOCK_STATUS_KEY: "associated_bridge_offline", "lockID": "xxx"},
+        )
+
+    assert [activity.action for activity in activities] == ["associated_bridge_offline"]
+    assert caplog.text == ""
