@@ -12,6 +12,7 @@ from yalexs.activity import (
     ACTION_DOOR_OPEN,
     ACTION_DOOR_OPEN_2,
     ACTION_DOORBELL_BUTTON_PUSHED,
+    ACTION_DOORBELL_CALL_BUTTON_PRESS,
     ACTION_DOORBELL_CALL_HANGUP,
     ACTION_DOORBELL_CALL_INITIATED,
     ACTION_DOORBELL_CALL_MISSED,
@@ -73,7 +74,7 @@ from yalexs.activity import (
     LockOperationActivity,
 )
 from yalexs.api_async import ApiAsync
-from yalexs.api_common import API_GET_LOCK_URL, ApiCommon
+from yalexs.api_common import API_GET_LOCK_URL, ApiCommon, _activity_from_dict
 from yalexs.const import DEFAULT_BRAND
 from yalexs.lock import LockDoorStatus, LockStatus
 from yalexs.time import epoch_to_datetime
@@ -108,6 +109,7 @@ class TestActivity(unittest.TestCase):
                 ACTION_DOORBELL_BUTTON_PUSHED,
                 ACTION_DOORBELL_CALL_MISSED,
                 ACTION_DOORBELL_CALL_HANGUP,
+                ACTION_DOORBELL_CALL_BUTTON_PRESS,
                 ACTION_LOCK_DOORBELL_BUTTON_PUSHED,
             ],
         )
@@ -473,6 +475,26 @@ class TestActivity(unittest.TestCase):
         )
         assert doorbell_ding_activity.activity_start_time.timestamp() == 1691249378.0
         assert doorbell_ding_activity.activity_end_time.timestamp() == 1691249378.0
+
+    def test_get_doorbell_call_button_press(self):
+        """A button press on an eagle_doorbell (Yale "aa" platform) is a ding.
+
+        These doorbells never push over PubNub/websocket; the press only ever
+        shows up in the house activity feed as doorbell_call_button_press,
+        with the visitor still as a top-level attachment.
+        """
+        activity = _activity_from_dict(
+            SOURCE_LOG, json.loads(load_fixture("doorbell_call_button_press.json"))
+        )
+        assert isinstance(activity, DoorbellDingActivity)
+        assert activity.activity_type == ActivityType.DOORBELL_DING
+        assert activity.device_id == "K98GiDT45GUL"
+        assert activity.activity_start_time.timestamp() == 1788273328.743
+        assert activity.activity_end_time.timestamp() == 1788273328.743
+        assert activity.image_url == (
+            "https://videocontent.aaecosystem.com/any/K98GiDT45GUL/images/"
+            "f507c53a-210d-48bb-b2f8-b575bc14e108.jpeg"
+        )
 
 
 class TestActivityApiAsync(unittest.IsolatedAsyncioTestCase):

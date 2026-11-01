@@ -1,0 +1,23 @@
+{
+  "id": "f507c53a-210d-48bb-b2f8-b575bc14e108",
+  "timestamp": 1788273328743,
+  "icon": "https://activity-icon.aaecosystem.com/app/ActivityFeedIcons/doorbell_detected_doorbell_ring@3x.png",
+  "action": "doorbell_call_button_press",
+  "deviceID": "K98GiDT45GUL",
+  "deviceType": "doorbell",
+  "attachment": "https://videocontent.aaecosystem.com/any/K98GiDT45GUL/images/f507c53a-210d-48bb-b2f8-b575bc14e108.jpeg",
+  "attachmentWidth": 1920,
+  "attachmentHeight": 1080,
+  "doorbell": {
+    "contentToken": "any",
+    "dvrID": "f507c53a-210d-48bb-b2f8-b575bc14e108",
+    "videoUploadProgress": "not_started",
+    "videoAvailable": false,
+    "videoRecordingState": "recording_ongoing",
+    "eventContainsVideoContent": true
+  },
+  "reason": "DOORBELL_RING",
+  "otherReasonIcons": [],
+  "userActions": [],
+  "title": "<b>Front Door</b> pressed in <b>Home</b>"
+}
