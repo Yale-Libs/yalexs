@@ -356,6 +356,11 @@ class Activity:
         # Check if this was marked as a manual operation (from PubNub without timestamp)
         if self._info.get("manual"):
             return False
+        # Check if this was marked as an operation by a named calling user
+        # (from PubNub without a timestamp, so the id is not trusted for
+        # attribution but still proves the lock was operated)
+        if self._info.get("operator"):
+            return False
         # Empty info typically means status update (except for WebSocket activities)
         return not self._info and self.source != SOURCE_WEBSOCKET
 

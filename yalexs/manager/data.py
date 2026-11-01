@@ -22,7 +22,7 @@ from ..const import Brand
 from ..doorbell import ContentTokenExpired, Doorbell, DoorbellDetail
 from ..exceptions import AugustApiAIOHTTPError, YaleApiError
 from ..lock import Lock, LockDetail, LockOperation
-from ..pubnub_activity import activities_from_pubnub_message
+from ..pubnub_activity import activities_from_pubnub_message, is_operator_calling_user
 from ..pubnub_async import AugustPubNub
 from .activity import ActivityStream
 from .const import MIN_TIME_BETWEEN_DETAIL_UPDATES
@@ -697,6 +697,12 @@ class YaleXSData(SubscriberMixin):
             if last_state and all(activity.is_status for activity in activities):
                 # Status update with changed state or no previous state - don't track it
                 return last_state == current_state
+            # A push naming the operating user repeats the state that its
+            # manual<action> copy already reported, but it is the copy that
+            # tells us who operated the lock, so it is never unchanged
+            if is_operator_calling_user(message.get("callingUserID")):
+                self._last_push_state[state_key] = current_state
+                return False
 
         # If we have a previous state and it matches current state, it's unchanged
         if last_state and last_state == current_state:
