@@ -2166,7 +2166,7 @@ async def test_handle_push_message_logs_and_skips_status_activities_when_state_c
             SOURCE_PUBNUB,
         )
 
-    stream.async_schedule_house_id_refresh.assert_called_once_with("h")
+    stream.async_schedule_house_id_refresh.assert_called_once_with("h", "d")
 
 
 def _make_bare_push_state_holder() -> Any:

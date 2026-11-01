@@ -314,7 +314,9 @@ class YaleXSData(SubscriberMixin):
                     device_id,
                     activity,
                 )
-                activity_stream.async_schedule_house_id_refresh(device.house_id)
+                activity_stream.async_schedule_house_id_refresh(
+                    device.house_id, device.device_id
+                )
                 break
 
     async def async_stop(self, *args: Any) -> None:  # noqa: ARG002
