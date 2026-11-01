@@ -11,6 +11,8 @@ import pytest
 
 from yalexs.bridge import BridgeStatus
 from yalexs.lock import (
+    _DOOR_STATE_BY_TOKEN,
+    _LOCK_STATUS_BY_TOKEN,
     Lock,
     LockDetail,
     LockDoorStatus,
@@ -224,3 +226,46 @@ def test_determine_door_state_known_states_and_fallback() -> None:
     assert determine_door_state("init") is LockDoorStatus.DISABLED
     assert determine_door_state(None) is LockDoorStatus.DISABLED
     assert determine_door_state("bogus") is LockDoorStatus.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("SECUREMODE", LockStatus.LOCKED),
+        ("SecureMode", LockStatus.LOCKED),
+        ("Secure", LockStatus.LOCKED),
+        ("Locked", LockStatus.LOCKED),
+        ("kauglockstate_unlocked", LockStatus.UNLOCKED),
+        ("failed_bridge_error_lock_jammed", LockStatus.JAMMED),
+        (None, LockStatus.UNKNOWN),
+        ("", LockStatus.UNKNOWN),
+    ],
+)
+def test_determine_lock_status_is_case_insensitive(
+    raw: str | None, expected: LockStatus
+) -> None:
+    assert determine_lock_status(raw) is expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("CLOSED", LockDoorStatus.CLOSED),
+        ("kAugDoorState_OPEN", LockDoorStatus.OPEN),
+        ("Init", LockDoorStatus.DISABLED),
+        ("", LockDoorStatus.DISABLED),
+        (None, LockDoorStatus.DISABLED),
+        ("bogus", LockDoorStatus.UNKNOWN),
+    ],
+)
+def test_determine_door_state_is_case_insensitive(
+    raw: str | None, expected: LockDoorStatus
+) -> None:
+    assert determine_door_state(raw) is expected
+
+
+def test_every_known_token_survives_case_folding() -> None:
+    for token, expected in _LOCK_STATUS_BY_TOKEN.items():
+        assert determine_lock_status(token.upper()) is expected
+    for token, expected in _DOOR_STATE_BY_TOKEN.items():
+        assert determine_door_state(token.upper()) is expected
