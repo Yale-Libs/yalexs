@@ -616,14 +616,14 @@ files = [
 
 [[package]]
 name = "freenub"
-version = "0.1.0"
+version = "0.1.2"
 description = "This is a fork of pubnub when it still had an MIT license"
 optional = false
-python-versions = "<4.0,>=3.8"
+python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "freenub-0.1.0-py3-none-any.whl", hash = "sha256:30a1eae368b34b502d006dedaa6e27edc47664f998cfaeeb15586b6ca727cb4d"},
-    {file = "freenub-0.1.0.tar.gz", hash = "sha256:56961826ba6ace9cb4b41747014b1b1443884443f6008857397d6ce44757f88b"},
+    {file = "freenub-0.1.2-py3-none-any.whl", hash = "sha256:5045c471ba200f6206a6b7be7f4d17ebb3755844cc56e83f4914a7b6d0419520"},
+    {file = "freenub-0.1.2.tar.gz", hash = "sha256:13fbe830499eb6a72db50772e0bda069e5aa485cdc4bca67d64b0b995856bac9"},
 ]
 
 [package.dependencies]
@@ -1987,4 +1987,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "90652fb49fd96094a6a81b152513f7fcc8ff471cacc6d3ca76ed8c6bbf25232e"
+content-hash = "8c1d8241ccf8e26946016a332959f2eca570aa1b25b1dbe2f35c4625dac6f010"
