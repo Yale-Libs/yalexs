@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 
 UpdateCallbackType = Callable[[str, datetime, dict[str, Any]], None]
 
+# Seconds between attempts at the initial connect, doubled after each failed
+# attempt up to the maximum
+CONNECT_RETRY_MIN_DELAY = 1
+CONNECT_RETRY_MAX_DELAY = 60
+
 
 class SocketIORunner:
     """Run the socketio client."""
@@ -79,12 +84,24 @@ class SocketIORunner:
             self._refresh_task = create_eager_task(self._refresh_access_token())
             self.connected = False
 
-        await sio.connect(
-            f"https://websocket.aaecosystem.com/?subscriberID={self._subscriber_id}",
-            retry=True,
-            transports=["websocket"],
-            headers=self.headers,
-        )
+        delay = CONNECT_RETRY_MIN_DELAY
+        while True:
+            try:
+                await sio.connect(
+                    f"https://websocket.aaecosystem.com/?subscriberID={self._subscriber_id}",
+                    retry=True,
+                    transports=["websocket"],
+                    headers=self.headers,
+                )
+                break
+            except socketio.exceptions.ConnectionError as ex:
+                # retry=True only covers failing to open the transport; a
+                # namespace connect that times out after it opened still raises
+                _LOGGER.debug(
+                    "websocket connect failed, retrying in %s seconds: %s", delay, ex
+                )
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, CONNECT_RETRY_MAX_DELAY)
         await sio.wait()
 
     async def run(

@@ -9,10 +9,11 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import socketio
 
 from yalexs.backports.tasks import create_eager_task
 from yalexs.const import Brand
-from yalexs.manager.socketio import SocketIORunner
+from yalexs.manager.socketio import CONNECT_RETRY_MIN_DELAY, SocketIORunner
 
 
 def _make_gateway(token: str = "tok") -> MagicMock:  # noqa: S107
@@ -91,6 +92,85 @@ async def test_run_internal_wires_handlers_and_connects_to_subscriber_url(
     assert callable(kwargs["headers"])
     assert kwargs["headers"]() == runner.headers()
     fake_socketio_client.wait.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_run_internal_retries_connect_after_connection_error(
+    fake_socketio_client: MagicMock,
+) -> None:
+    """A namespace connect timeout on the first attempt must not end the task."""
+    runner = SocketIORunner(_make_gateway())
+    runner._subscriber_id = "abc"
+    fake_socketio_client.connect.side_effect = [
+        socketio.exceptions.ConnectionError("Unexpected connection error"),
+        None,
+    ]
+
+    with patch(
+        "yalexs.manager.socketio.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
+        await runner._run()
+
+    assert fake_socketio_client.connect.await_count == 2
+    first_call, second_call = fake_socketio_client.connect.await_args_list
+    assert first_call == second_call
+    mock_sleep.assert_awaited_once_with(CONNECT_RETRY_MIN_DELAY)
+    fake_socketio_client.wait.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_run_internal_connect_retry_delay_doubles_up_to_the_cap(
+    fake_socketio_client: MagicMock,
+) -> None:
+    runner = SocketIORunner(_make_gateway())
+    runner._subscriber_id = "abc"
+    failure = socketio.exceptions.ConnectionError("Unexpected connection error")
+    fake_socketio_client.connect.side_effect = [*([failure] * 8), None]
+
+    with patch(
+        "yalexs.manager.socketio.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
+        await runner._run()
+
+    delays = [call.args[0] for call in mock_sleep.await_args_list]
+    assert delays == [1, 2, 4, 8, 16, 32, 60, 60]
+    assert fake_socketio_client.connect.await_count == 9
+    fake_socketio_client.wait.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unsub_stops_connect_retry_during_backoff(
+    fake_socketio_client: MagicMock,
+) -> None:
+    """Shutdown must cancel a task that is sleeping between connect attempts."""
+    runner = SocketIORunner(_make_gateway())
+    fake_socketio_client.connect.side_effect = socketio.exceptions.ConnectionError(
+        "Unexpected connection error"
+    )
+    in_backoff = asyncio.Event()
+    backoff_cancelled = asyncio.Event()
+    never_set = asyncio.Event()
+
+    async def _sleep_until_cancelled(delay: float) -> None:
+        in_backoff.set()
+        try:
+            await never_set.wait()
+        except asyncio.CancelledError:
+            backoff_cancelled.set()
+            raise
+
+    with patch(
+        "yalexs.manager.socketio.asyncio.sleep",
+        new_callable=AsyncMock,
+        side_effect=_sleep_until_cancelled,
+    ):
+        unsub = await runner.run(user_uuid="user")
+        await asyncio.wait_for(in_backoff.wait(), timeout=5)
+        await unsub()
+
+    assert backoff_cancelled.is_set()
+    fake_socketio_client.connect.assert_awaited_once()
+    fake_socketio_client.wait.assert_not_awaited()
 
 
 @pytest.mark.asyncio
